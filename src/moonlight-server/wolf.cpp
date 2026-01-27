@@ -176,16 +176,21 @@ void run() {
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
 
   // HTTP APIs
-  auto http_thread = std::thread([local_state]() {
-    HttpServer server = HttpServer();
-    HTTPServers::startServer(&server, local_state, state::get_port(state::HTTP_PORT));
-  });
+  if (utils::get_env("WOLF_START_HTTP_SERVER", "true") == std::string("true")) {
+    logs::log(logs::info, "Starting HTTP server on port {}", state::get_port(state::HTTP_PORT));
+    std::thread([local_state]() {
+      HttpServer server = HttpServer();
+      HTTPServers::startServer(&server, local_state, state::get_port(state::HTTP_PORT));
+    }).detach();
 
-  // HTTPS APIs
-  std::thread([local_state, p_key_file, p_cert_file]() {
-    HttpsServer server = HttpsServer(p_cert_file, p_key_file);
-    HTTPServers::startServer(&server, local_state, state::get_port(state::HTTPS_PORT));
-  }).detach();
+    logs::log(logs::info, "Starting HTTPS server on port {}", state::get_port(state::HTTPS_PORT));
+    std::thread([local_state, p_key_file, p_cert_file]() {
+      HttpsServer server = HttpsServer(p_cert_file, p_key_file);
+      HTTPServers::startServer(&server, local_state, state::get_port(state::HTTPS_PORT));
+    }).detach();
+  } else {
+    logs::log(logs::info, "HTTP server disabled via WOLF_START_HTTP_SERVER");
+  }
 
   // RTSP
   std::thread([sessions = local_state->running_sessions]() {
@@ -202,25 +207,29 @@ void run() {
                       state::get_port(state::AUDIO_PING_PORT),
                       local_state->event_bus);
   // Wolf API server
-  std::thread([local_state, runtime_dir]() { wolf::api::start_server(runtime_dir, local_state); }).detach();
+  auto main_thread = std::thread([local_state, runtime_dir]() { wolf::api::start_server(runtime_dir, local_state); });
 
   // mDNS
-  std::thread([hostname = local_state->config->hostname]() {
-    logs::log(logs::info, "Starting mDNS service");
-    try {
-      mdns_cpp::Logger::setLoggerSink([](const std::string &msg) {
-        // msg here will include a /n at the end, so we remove it
-        logs::log(logs::trace, "mDNS: {}", msg.substr(0, msg.size() - 1));
-      });
-      mdns_cpp::mDNS mdns;
-      mdns.setServiceName("_nvstream._tcp.local.");
-      mdns.setServiceHostname(hostname);
-      mdns.setServicePort(state::HTTP_PORT);
-      mdns.startService(false);
-    } catch (const std::exception &e) {
-      logs::log(logs::error, "mDNS error: {}", e.what());
-    }
-  }).detach();
+  if (utils::get_env("WOLF_START_MDNS", "true") == std::string("true")) {
+    std::thread([hostname = local_state->config->hostname]() {
+      logs::log(logs::info, "Starting mDNS service");
+      try {
+        mdns_cpp::Logger::setLoggerSink([](const std::string &msg) {
+          // msg here will include a /n at the end, so we remove it
+          logs::log(logs::trace, "mDNS: {}", msg.substr(0, msg.size() - 1));
+        });
+        mdns_cpp::mDNS mdns;
+        mdns.setServiceName("_nvstream._tcp.local.");
+        mdns.setServiceHostname(hostname);
+        mdns.setServicePort(state::HTTP_PORT);
+        mdns.startService(false);
+      } catch (const std::exception &e) {
+        logs::log(logs::error, "mDNS error: {}", e.what());
+      }
+    }).detach();
+  } else {
+    logs::log(logs::info, "mDNS service disabled via WOLF_START_MDNS");
+  }
 
   auto audio_server = setup_audio_server(local_state->host->host_xdg_runtime_dir, runtime_dir);
   // Setup event handlers for Moonlight related events (Start/Stop stream, hotplug, etc)
@@ -228,7 +237,8 @@ void run() {
   // Setup event handlers for player Lobbies
   auto lobbies_handlers = sessions::setup_lobbies_handlers(local_state, runtime_dir, audio_server);
 
-  http_thread.join(); // Let's park the main thread over here
+  // Park the main thread
+  main_thread.join();
 }
 
 int main(int argc, char *argv[]) try {

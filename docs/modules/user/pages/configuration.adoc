@@ -54,6 +54,14 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |WOLF_DOCKER_FAKE_UDEV_PATH
 |$HOST_APPS_STATE_FOLDER/fake-udev
 |The path on the host for the fake-udev CLI tool
+
+|WOLF_START_HTTP_SERVER
+|true
+|Set to true to enable the HTTP/HTTPS server on the configured HTTP port
+
+|WOLF_START_MDNS
+|true
+|Set to true to enable the mDNS service for automatic host discovery
 |===
 
 Additional env variables useful when debugging:
