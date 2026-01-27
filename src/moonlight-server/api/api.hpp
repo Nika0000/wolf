@@ -86,6 +86,55 @@ struct ProfileRemoveRequest {
   std::string id;
 };
 
+struct ServerInfoResponse {
+  bool success = true;
+
+  rfl::Description<"Server ID", std::string> unique_id;
+
+  rfl::Description<"Server Hostname", std::string> hostname;
+  rfl::Description<"App version", std::string> app_version;
+  rfl::Description<"GFE version", std::string> gfe_version;
+
+  rfl::Description<"Max luma pixels HEVC", int> max_luma_pixels;
+  rfl::Description<"Server codec mode support", int> codec_mode_support;
+
+  rfl::Description<"RTSP Session Port", int> rtsp_port;
+};
+
+struct StreamSessionCreateRequest {
+  rfl::Description<"Client IP address", std::string> client_ip;
+  rfl::Description<"AES encryption key", std::string> aes_key;
+  rfl::Description<"AES initialization vector", std::string> aes_iv;
+  rfl::Description<"RTSP fake IP for IP-less connections", std::string> rtsp_fake_ip;
+
+  rfl::Description<"Video width", int> video_width;
+  rfl::Description<"Video height", int> video_height;
+  rfl::Description<"Video refresh rate", int> video_refresh_rate;
+  rfl::Description<"Audio channel count", int> audio_channel_count;
+
+  rfl::Description<"Video producer buffer caps (optional, will use defaults if not provided)",
+                   std::optional<std::string>>
+      video_producer_buffer_caps;
+  rfl::Description<"H264 GStreamer pipeline (optional, will use defaults if not provided)", std::optional<std::string>>
+      h264_gst_pipeline;
+  rfl::Description<"HEVC GStreamer pipeline (optional, will use defaults if not provided)", std::optional<std::string>>
+      hevc_gst_pipeline;
+  rfl::Description<"AV1 GStreamer pipeline (optional, will use defaults if not provided)", std::optional<std::string>>
+      av1_gst_pipeline;
+  rfl::Description<"Render node (optional, will use defaults if not provided)", std::optional<std::string>> render_node;
+  rfl::Description<"Opus GStreamer pipeline (optional, will use defaults if not provided)", std::optional<std::string>>
+      opus_gst_pipeline;
+  rfl::Description<"Start virtual compositor (optional, defaults to true)", std::optional<bool>>
+      start_virtual_compositor;
+  rfl::Description<"Start audio server (optional, defaults to true)", std::optional<bool>> start_audio_server;
+
+  rfl::Description<"Runner configuration", events::RunnerTypes> runner;
+  rfl::Description<"Client settings (optional)", std::optional<config::ClientSettings>> client_settings;
+  rfl::Description<"Client ID (optional, will create dummy client if not provided)", std::optional<std::string>>
+      client_id;
+  rfl::Description<"App state folder (optional)", std::optional<std::string>> app_state_folder;
+};
+
 struct StreamSessionCreated {
   bool success = true;
   std::string session_id;
@@ -205,7 +254,10 @@ private:
   void endpoint_AddProfile(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_RemoveProfile(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
+  void endpoint_ServerInfo(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+
   void endpoint_StreamSessions(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_StreamSessionCreate(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionAdd(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionStart(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);

@@ -151,6 +151,8 @@ template <> struct Reflector<events::StreamSession> {
 
     int audio_channel_count;
 
+    std::optional<std::string> session_id;
+    std::optional<std::string> app_state_folder;
     std::optional<std::string> app_id;
     std::optional<std::string> client_id;
     std::optional<ClientSettings> client_settings;
@@ -165,6 +167,8 @@ template <> struct Reflector<events::StreamSession> {
             .video_height = v.display_mode.height,
             .video_refresh_rate = v.display_mode.refreshRate,
             .audio_channel_count = v.audio_channel_count,
+            .session_id = std::to_string(v.session_id),
+            .app_state_folder = v.app_local_state_folder,
             .app_id = v.app->base.id,
             .client_id = std::to_string(v.session_id),
             .client_settings = v.client_settings};

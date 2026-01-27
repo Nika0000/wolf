@@ -1,6 +1,7 @@
 #include <api/api.hpp>
 #include <control/input_handler.hpp>
 #include <core/docker.hpp>
+#include <moonlight/protocol.hpp>
 #include <rtp/udp-ping.hpp>
 #include <state/config.hpp>
 #include <state/sessions.hpp>
@@ -200,12 +201,129 @@ void UnixSocketServer::endpoint_RemoveProfile(const HTTPRequest &req, std::share
   }
 }
 
+void UnixSocketServer::endpoint_ServerInfo(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto res = ServerInfoResponse{.success = true};
+
+  auto cfg = state_->app_state->config;
+
+  res.unique_id = cfg->uuid;
+  res.hostname = cfg->hostname;
+  res.app_version = moonlight::M_VERSION;
+  res.gfe_version = moonlight::M_GFE_VERSION;
+
+  int codec_support = moonlight::VIDEO_FORMAT_H264;
+  int max_luma_pixels = 0;
+  if (cfg->support_hevc) {
+    max_luma_pixels = 1869449984;
+    codec_support |= moonlight::VIDEO_FORMAT_H265;
+  }
+  if (cfg->support_av1) {
+    codec_support |= moonlight::VIDEO_FORMAT_AV1_MAIN8;
+  }
+
+  res.max_luma_pixels = max_luma_pixels;
+  res.codec_mode_support = codec_support;
+
+  res.rtsp_port = state::get_port(state::RTSP_SETUP_PORT);
+
+  send_http(socket, 200, rfl::json::write(res));
+}
+
 void UnixSocketServer::endpoint_StreamSessions(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto res = StreamSessionListResponse{.success = true};
   auto sessions = state_->app_state->running_sessions->load();
   for (const auto &session : sessions.get()) {
     res.sessions.push_back(rfl::Reflector<events::StreamSession>::from(session));
   }
+  send_http(socket, 200, rfl::json::write(res));
+}
+
+void UnixSocketServer::endpoint_StreamSessionCreate(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto session_req = rfl::json::read<StreamSessionCreateRequest>(req.body);
+  if (!session_req) {
+    logs::log(logs::warning, "[API] Invalid request: {} - {}", req.body, session_req.error().what());
+    auto res = GenericErrorResponse{.error = session_req.error().what()};
+    send_http(socket, 500, rfl::json::write(res));
+    return;
+  }
+
+  auto ss = session_req.value();
+
+  // Get defaults from moonlight profile if available
+  auto moonlight_profile = state::get_moonlight_profile(this->state_->app_state->config);
+  immer::vector<immer::box<events::App>> apps = moonlight_profile.value()->apps->load();
+  immer::box<events::App> sample_app = apps.front();
+
+  std::string default_video_buffer_caps = sample_app->video_producer_buffer_caps;
+  std::string default_h264_pipeline = sample_app->h264_gst_pipeline;
+  std::string default_hevc_pipeline = sample_app->hevc_gst_pipeline;
+  std::string default_av1_pipeline = sample_app->av1_gst_pipeline;
+  std::string default_render_node = sample_app->render_node;
+  std::string default_opus_pipeline = sample_app->opus_gst_pipeline;
+
+  // Create the runner from user-provided configuration
+  auto runner = state::get_runner(ss.runner.value(), this->state_->app_state->event_bus);
+
+  // Create the app from user-provided configuration (not from moonlight profiles)
+  immer::box<events::App> app = events::App{
+      .base = {.title = "user-created", .id = state::gen_uuid(), .support_hdr = false, .icon_png_path = ""},
+
+      .video_producer_buffer_caps = ss.video_producer_buffer_caps.get().value_or(default_video_buffer_caps),
+
+      .h264_gst_pipeline = ss.h264_gst_pipeline.get().value_or(default_h264_pipeline),
+      .hevc_gst_pipeline = ss.hevc_gst_pipeline.get().value_or(default_hevc_pipeline),
+      .av1_gst_pipeline = ss.av1_gst_pipeline.get().value_or(default_av1_pipeline),
+
+      .render_node = ss.render_node.get().value_or(default_render_node),
+      .opus_gst_pipeline = ss.opus_gst_pipeline.get().value_or(default_opus_pipeline),
+      .start_virtual_compositor = ss.start_virtual_compositor.get().value_or(true),
+      .start_audio_server = ss.start_audio_server.get().value_or(true),
+
+      .runner = runner};
+
+  // Handle client - either provided or create a dummy one
+  config::PairedClient choosen_client;
+  if (ss.client_id.get()) {
+    auto client = state::get_client_by_id(this->state_->app_state->config, ss.client_id.get().value());
+    if (!client) {
+      logs::log(logs::warning, "[API] Invalid client_id: {}", ss.client_id.get().value());
+      auto res = GenericErrorResponse{.error = "Invalid client_id"};
+      send_http(socket, 500, rfl::json::write(res));
+      return;
+    }
+    choosen_client = *client;
+  } else {
+    // Create a dummy client
+    choosen_client = {.client_cert = "",
+                      .app_state_folder = ss.app_state_folder.get().value_or(state::gen_uuid()),
+                      .settings = ss.client_settings.get().value_or(config::ClientSettings{})};
+  }
+
+  // Create the stream session
+  auto new_session = state::create_stream_session(
+      state_->app_state,
+      *app,
+      choosen_client,
+      moonlight::DisplayMode{.width = ss.video_width.value(),
+                             .height = ss.video_height.value(),
+                             .refreshRate = ss.video_refresh_rate.value(),
+                             .hevc_supported = state_->app_state->config->support_hevc,
+                             .av1_supported = state_->app_state->config->support_av1},
+      ss.audio_channel_count.value(),
+      ss.aes_key.value(),
+      ss.aes_iv.value());
+
+  new_session->ip = ss.client_ip.value();
+  new_session->rtsp_fake_ip = ss.rtsp_fake_ip.value();
+
+  // Add session to running sessions
+  state_->app_state->running_sessions->update(
+      [new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(*new_session); });
+
+  // Fire the event
+  state_->app_state->event_bus->fire_event(immer::box<events::StreamSession>(*new_session));
+
+  auto res = StreamSessionCreated{.success = true, .session_id = std::to_string(new_session->session_id)};
   send_http(socket, 200, rfl::json::write(res));
 }
 

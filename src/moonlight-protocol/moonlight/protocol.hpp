@@ -14,6 +14,12 @@ using XML = pt::ptree;
 constexpr auto M_VERSION = "7.1.431.-1";
 constexpr auto M_GFE_VERSION = "3.23.0.74";
 
+constexpr int VIDEO_FORMAT_H264 = 0x0001;
+constexpr int VIDEO_FORMAT_H265 = 0x0100;
+constexpr int VIDEO_FORMAT_H265_MAIN10 = 0x00200;
+constexpr int VIDEO_FORMAT_AV1_MAIN8 = 0x10000;
+constexpr int VIDEO_FORMAT_AV1_MAIN10 = 0x20000;
+
 /**
  * @brief Step 1: GET server status
  *

@@ -24,7 +24,7 @@
   "runArgs": [
     "--network=host",
     "-v",
-    "/tmp/sockets:/tmp/sockets:rw",
+    "/var/run/wolf:/var/run/wolf:rw",
     "-v",
     "/etc/wolf:/etc/wolf:rw",
     "-v",
@@ -44,7 +44,7 @@
     "NVIDIA_VISIBLE_DEVICES": "all"
   },
   "remoteEnv": {
-    "XDG_RUNTIME_DIR": "/tmp/sockets",
+    "XDG_RUNTIME_DIR": "/var/run/wolf",
     "WOLF_LOG_LEVEL": "DEBUG",
     "HOST_APPS_STATE_FOLDER": "/etc/wolf",
     "WOLF_CFG_FOLDER": "/etc/wolf/cfg/",
@@ -52,7 +52,7 @@
     "WOLF_PRIVATE_KEY_FILE": "/etc/wolf/cfg/key.pem",
     "WOLF_PRIVATE_CERT_FILE": "/etc/wolf/cfg/cert.pem",
     "WOLF_PULSE_IMAGE": "ghcr.io/games-on-whales/pulseaudio:master",
-    "WOLF_RENDER_NODE": "/dev/dri/renderD128",
+    "WOLF_RENDER_NODE": "/dev/dri/renderD129",
     "WOLF_STOP_CONTAINER_ON_EXIT": "TRUE",
     "WOLF_DOCKER_SOCKET": "/var/run/docker.sock",
     "WOLF_DOCKER_FAKE_UDEV_PATH": "/etc/wolf/fake-udev",

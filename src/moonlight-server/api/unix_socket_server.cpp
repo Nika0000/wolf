@@ -144,6 +144,17 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
           .handler = [this](auto req, auto socket) { endpoint_AddProfile(req, socket); },
       });
 
+  state_->http.add(HTTPMethod::GET,
+                   "/api/v1/serverinfo",
+                   {
+                       .summary = "Get server information",
+                       .description = "This endpoint returns Moonlight server information including supported codecs, "
+                                      "RTSP port, and other server capabilities.",
+                       .response_description = {{200, {.json_schema = rfl::json::to_schema<ServerInfoResponse>()}},
+                                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+                       .handler = [this](auto req, auto socket) { endpoint_ServerInfo(req, socket); },
+                   });
+
   state_->http.add(
       HTTPMethod::POST,
       "/api/v1/profiles/remove",
@@ -179,6 +190,20 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
           .response_description = {{200, {.json_schema = rfl::json::to_schema<StreamSessionCreated>()}},
                                    {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
           .handler = [this](auto req, auto socket) { endpoint_StreamSessionAdd(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/sessions/create",
+      {
+          .summary = "Create a new stream session with custom configuration",
+          .description = "This endpoint creates a stream session with full control over video/audio pipelines, "
+                         "runner configuration, and client settings. Use this for advanced session creation.",
+          .request_description =
+              APIDescription{.json_schema = rfl::json::to_schema<StreamSessionCreateRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<StreamSessionCreated>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_StreamSessionCreate(req, socket); },
       });
 
   state_->http.add(

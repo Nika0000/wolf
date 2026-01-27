@@ -5,12 +5,6 @@ namespace pt = boost::property_tree;
 
 namespace moonlight {
 
-constexpr int VIDEO_FORMAT_H264 = 0x0001;
-constexpr int VIDEO_FORMAT_H265 = 0x0100;
-constexpr int VIDEO_FORMAT_H265_MAIN10 = 0x00200;
-constexpr int VIDEO_FORMAT_AV1_MAIN8 = 0x10000;
-constexpr int VIDEO_FORMAT_AV1_MAIN10 = 0x20000;
-
 XML serverinfo(bool isServerBusy,
                int current_appid,
                int https_port,
