@@ -199,8 +199,7 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
           .summary = "Create a new stream session with custom configuration",
           .description = "This endpoint creates a stream session with full control over video/audio pipelines, "
                          "runner configuration, and client settings. Use this for advanced session creation.",
-          .request_description =
-              APIDescription{.json_schema = rfl::json::to_schema<StreamSessionCreateRequest>()},
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<StreamSessionCreateRequest>()},
           .response_description = {{200, {.json_schema = rfl::json::to_schema<StreamSessionCreated>()}},
                                    {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
           .handler = [this](auto req, auto socket) { endpoint_StreamSessionCreate(req, socket); },
