@@ -33,11 +33,11 @@ inline std::optional<events::StreamSession> get_session_by_id(const immer::vecto
 inline std::optional<events::StreamSession> get_session_by_client(const immer::vector<events::StreamSession> &sessions,
                                                                   const wolf::config::PairedClient &client) {
   auto client_id = get_client_id(client);
-  auto results =
-      sessions |                                                                                             //
-      ranges::views::filter([client_id](const events::StreamSession &session) { return session.client_id == client_id; }) //
-      | ranges::views::take(1)                                                                               //
-      | ranges::to_vector;                                                                                   //
+  auto results = sessions | //
+                 ranges::views::filter(
+                     [client_id](const events::StreamSession &session) { return session.client_id == client_id; }) //
+                 | ranges::views::take(1)                                                                          //
+                 | ranges::to_vector;                                                                              //
   if (results.size() == 1) {
     return results[0];
   } else if (results.empty()) {
@@ -135,10 +135,10 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
 
 inline immer::vector<events::StreamSession> remove_session(const immer::vector<events::StreamSession> &sessions,
                                                            const events::StreamSession &session) {
-  return sessions                                                                                        //
+  return sessions                                                                                         //
          | ranges::views::filter([remove_id = session.session_id](const events::StreamSession &cur_ses) { //
-             return cur_ses.session_id != remove_id;                                                     //
-           })                                                                                            //
-         | ranges::to<immer::vector<events::StreamSession>>();                                           //
+             return cur_ses.session_id != remove_id;                                                      //
+           })                                                                                             //
+         | ranges::to<immer::vector<events::StreamSession>>();                                            //
 }
 } // namespace state

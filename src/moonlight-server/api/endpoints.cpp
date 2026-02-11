@@ -642,8 +642,8 @@ void UnixSocketServer::endpoint_LobbyStop(const wolf::api::HTTPRequest &req, std
 void UnixSocketServer::endpoint_RunnerStart(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto event = rfl::json::read<RunnerStartRequest>(req.body);
   if (event) {
-    auto session = state::get_session_by_id(this->state_->app_state->running_sessions->load(),
-                                            event.value().session_id);
+    auto session =
+        state::get_session_by_id(this->state_->app_state->running_sessions->load(), event.value().session_id);
     if (!session) {
       logs::log(logs::warning, "[API] Invalid session_id: {}", event.value().session_id);
       auto res = GenericErrorResponse{.error = "Invalid session_id"};

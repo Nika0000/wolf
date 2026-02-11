@@ -21,9 +21,8 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
   // Remove the current session from the lobby list
   lobby.connected_sessions->update([session](const immer::vector<immer::box<std::string>> &connected_sessions) {
     return connected_sessions | //
-           ranges::views::filter([session](const immer::box<std::string> &session_id) {
-             return *session_id != session.session_id;
-           }) | //
+           ranges::views::filter(
+               [session](const immer::box<std::string> &session_id) { return *session_id != session.session_id; }) | //
            ranges::to<immer::vector<immer::box<std::string>>>();
   });
 
@@ -55,8 +54,7 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
 
   // Switch audio/video gstreamer stream producers
   ev_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
-      events::SwitchStreamProducerEvents{.session_id = session.session_id,
-                                         .interpipe_src_id = session.session_id}});
+      events::SwitchStreamProducerEvents{.session_id = session.session_id, .interpipe_src_id = session.session_id}});
 
   if (lobby.stop_when_everyone_leaves && lobby.connected_sessions->load()->size() == 0) {
     // Nobody left in the lobby, and it's set to stop when everyone leaves
