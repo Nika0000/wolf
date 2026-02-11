@@ -210,7 +210,7 @@ void RunDocker::run(std::string_view session_id,
 
     auto terminate_handler = this->ev_bus->register_handler<immer::box<events::StopStreamEvent>>(
         [session_id, container_id, this](const immer::box<events::StopStreamEvent> &terminate_ev) {
-          if (std::to_string(terminate_ev->session_id) == session_id) {
+          if (terminate_ev->session_id == session_id) {
             docker_api.stop_by_id(container_id);
           }
         });

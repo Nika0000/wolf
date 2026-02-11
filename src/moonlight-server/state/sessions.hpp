@@ -14,7 +14,7 @@ namespace state {
 using namespace wolf::core;
 
 inline std::optional<events::StreamSession> get_session_by_id(const immer::vector<events::StreamSession> &sessions,
-                                                              const std::size_t id) {
+                                                              std::string_view id) {
   auto results =
       sessions |                                                                                             //
       ranges::views::filter([id](const events::StreamSession &session) { return session.session_id == id; }) //
@@ -33,7 +33,19 @@ inline std::optional<events::StreamSession> get_session_by_id(const immer::vecto
 inline std::optional<events::StreamSession> get_session_by_client(const immer::vector<events::StreamSession> &sessions,
                                                                   const wolf::config::PairedClient &client) {
   auto client_id = get_client_id(client);
-  return get_session_by_id(sessions, client_id);
+  auto results =
+      sessions |                                                                                             //
+      ranges::views::filter([client_id](const events::StreamSession &session) { return session.client_id == client_id; }) //
+      | ranges::views::take(1)                                                                               //
+      | ranges::to_vector;                                                                                   //
+  if (results.size() == 1) {
+    return results[0];
+  } else if (results.empty()) {
+    return {};
+  } else {
+    logs::log(logs::warning, "Found multiple sessions for a given client ID: {}", client_id);
+    return {};
+  }
 }
 
 inline std::optional<events::Lobby> get_lobby_by_id(const immer::vector<events::Lobby> &lobbies,
@@ -112,7 +124,8 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
       .rtsp_fake_ip = rtsp_fake_ip,
 
       // client info
-      .session_id = get_client_id(current_client),
+      .session_id = gen_uuid(),
+      .client_id = get_client_id(current_client),
       .video_stream_port = static_cast<unsigned short>(get_port(VIDEO_PING_PORT)),
       .audio_stream_port = static_cast<unsigned short>(get_port(AUDIO_PING_PORT)),
       .control_stream_port = static_cast<unsigned short>(get_port(CONTROL_PORT))};
@@ -122,10 +135,10 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
 
 inline immer::vector<events::StreamSession> remove_session(const immer::vector<events::StreamSession> &sessions,
                                                            const events::StreamSession &session) {
-  return sessions                                                                                           //
-         | ranges::views::filter([remove_hash = session.session_id](const events::StreamSession &cur_ses) { //
-             return cur_ses.session_id != remove_hash;                                                      //
-           })                                                                                               //
-         | ranges::to<immer::vector<events::StreamSession>>();                                              //
+  return sessions                                                                                        //
+         | ranges::views::filter([remove_id = session.session_id](const events::StreamSession &cur_ses) { //
+             return cur_ses.session_id != remove_id;                                                     //
+           })                                                                                            //
+         | ranges::to<immer::vector<events::StreamSession>>();                                           //
 }
 } // namespace state

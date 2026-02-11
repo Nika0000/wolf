@@ -119,7 +119,7 @@ void start_video_producer(const std::string &session_id,
 
     auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
         [session_id, pipeline](const immer::box<events::StopStreamEvent> &ev) {
-          if (std::to_string(ev->session_id) == session_id) {
+          if (ev->session_id == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping video producer: {}", session_id);
             gst_element_send_event(pipeline.get(), gst_event_new_eos());
           }
@@ -171,7 +171,7 @@ void start_audio_producer(const std::string &session_id,
   run_pipeline(pipeline, [=](auto pipeline) {
     auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
         [session_id, pipeline](const immer::box<events::StopStreamEvent> &ev) {
-          if (std::to_string(ev->session_id) == session_id) {
+          if (ev->session_id == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping audio producer: {}", session_id);
             gst_element_send_event(pipeline.get(), gst_event_new_eos());
           }

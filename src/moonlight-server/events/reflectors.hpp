@@ -132,7 +132,7 @@ template <> struct Reflector<events::StartRunner> {
   static ReflType from(const events::StartRunner &v) {
     return {.stop_stream_when_over = v.stop_stream_when_over,
             .runner = v.runner->serialize(),
-            .session_id = std::to_string(v.stream_session->session_id)};
+            .session_id = v.stream_session->session_id};
   }
 };
 
@@ -167,10 +167,10 @@ template <> struct Reflector<events::StreamSession> {
             .video_height = v.display_mode.height,
             .video_refresh_rate = v.display_mode.refreshRate,
             .audio_channel_count = v.audio_channel_count,
-            .session_id = std::to_string(v.session_id),
+            .session_id = v.session_id,
             .app_state_folder = v.app_local_state_folder,
             .app_id = v.app->base.id,
-            .client_id = std::to_string(v.session_id),
+            .client_id = std::to_string(v.client_id),
             .client_settings = v.client_settings};
   }
 };

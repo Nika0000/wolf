@@ -60,7 +60,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           return state::remove_session(ses_v, {.session_id = ev->session_id});
         });
 
-        plugged_devices_queue->update([=](const auto map) { return map.erase(std::to_string(ev->session_id)); });
+        plugged_devices_queue->update([=](const auto map) { return map.erase(ev->session_id); });
       }));
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::PlugDeviceEvent>>(
@@ -86,7 +86,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         /* Initialise plugged device queue */
         auto devices_q = std::make_shared<events::devices_atom_queue>();
         plugged_devices_queue->update(
-            [=](const session_devices map) { return map.set(std::to_string(session->session_id), devices_q); });
+            [=](const session_devices map) { return map.set(session->session_id, devices_q); });
 
         std::shared_ptr<boost::promise<streaming::WaylandDisplayReady>> on_ready =
             std::make_shared<boost::promise<streaming::WaylandDisplayReady>>();
@@ -96,7 +96,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
 
           // Start Gstreamer producer pipeline
           std::thread([session, on_ready, gst_context = app_state->gst_context]() {
-            streaming::start_video_producer(std::to_string(session->session_id),
+            streaming::start_video_producer(session->session_id,
                                             session->app->video_producer_buffer_caps,
                                             session->app->render_node,
                                             {.width = session->display_mode.width,
@@ -114,7 +114,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           } else {
             auto mouse_ptr = input::Mouse(std::move(*mouse));
             devices_q->push(immer::box<events::PlugDeviceEvent>(
-                events::PlugDeviceEvent{.session_id = std::to_string(session->session_id),
+                events::PlugDeviceEvent{.session_id = session->session_id,
                                         .udev_events = mouse_ptr.get_udev_events(),
                                         .udev_hw_db_entries = mouse_ptr.get_udev_hw_db_entries()}));
             session->mouse->emplace(std::move(mouse_ptr));
@@ -126,7 +126,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           } else {
             auto keyboard_ptr = input::Keyboard(std::move(*keyboard));
             devices_q->push(immer::box<events::PlugDeviceEvent>(
-                events::PlugDeviceEvent{.session_id = std::to_string(session->session_id),
+                events::PlugDeviceEvent{.session_id = session->session_id,
                                         .udev_events = keyboard_ptr.get_udev_events(),
                                         .udev_hw_db_entries = keyboard_ptr.get_udev_hw_db_entries()}));
             session->keyboard->emplace(std::move(keyboard_ptr));
@@ -147,7 +147,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
 
           std::thread([session, audio_server = audio_server->server]() {
             auto sink_name = fmt::format("{}{}.monitor", VIRTUAL_SINK_PREFIX, session->session_id);
-            streaming::start_audio_producer(std::to_string(session->session_id),
+            streaming::start_audio_producer(session->session_id,
                                             session->event_bus,
                                             session->audio_channel_count,
                                             sink_name,
@@ -179,7 +179,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
   /* Start runner */
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StartRunner>>(
       [=](const immer::box<events::StartRunner> &run_session) {
-        auto session_id = std::to_string(run_session->stream_session->session_id);
+        const auto &session_id = run_session->stream_session->session_id;
         auto devices_q = plugged_devices_queue->load()->find(session_id);
         if (!devices_q) {
           logs::log(logs::warning, "No devices queue found for session {}", session_id);

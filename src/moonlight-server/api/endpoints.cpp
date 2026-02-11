@@ -323,7 +323,7 @@ void UnixSocketServer::endpoint_StreamSessionCreate(const HTTPRequest &req, std:
   // Fire the event
   state_->app_state->event_bus->fire_event(immer::box<events::StreamSession>(*new_session));
 
-  auto res = StreamSessionCreated{.success = true, .session_id = std::to_string(new_session->session_id)};
+  auto res = StreamSessionCreated{.success = true, .session_id = new_session->session_id};
   send_http(socket, 200, rfl::json::write(res));
 }
 
@@ -405,7 +405,7 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
         [new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(*new_session); });
     state_->app_state->event_bus->fire_event(immer::box<events::StreamSession>(*new_session));
 
-    auto res = StreamSessionCreated{.success = true, .session_id = std::to_string(new_session->session_id)};
+    auto res = StreamSessionCreated{.success = true, .session_id = new_session->session_id};
     send_http(socket, 200, rfl::json::write(res));
   } else {
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, session.error().what());
@@ -418,17 +418,17 @@ void UnixSocketServer::endpoint_StreamSessionStart(const HTTPRequest &req, std::
   auto start_req = rfl::json::read<StreamSessionStartRequest>(req.body);
   if (start_req) {
     auto sessions = state_->app_state->running_sessions->load();
-    auto session_id = std::stoul(start_req.value().session_id);
+    const auto &session_id = start_req.value().session_id;
     if (auto session = state::get_session_by_id(sessions.get(), session_id)) {
       auto video_session = start_req.value().video_session;
-      video_session.session_id = session_id; // Can't be JSON encoded
+      video_session.session_id = session_id;
       if (video_session.render_node.empty()) {
         video_session.render_node = session->app->render_node;
       }
       state_->app_state->event_bus->fire_event(immer::box<events::VideoSession>(video_session));
 
       auto audio_session = start_req.value().audio_session;
-      audio_session.session_id = session_id; // Can't be JSON encoded
+      audio_session.session_id = session_id;
       state_->app_state->event_bus->fire_event(immer::box<events::AudioSession>(audio_session));
 
       auto res = GenericSuccessResponse{.success = true};
@@ -449,7 +449,7 @@ void UnixSocketServer::endpoint_StreamSessionPause(const HTTPRequest &req, std::
   auto session = rfl::json::read<StreamSessionPauseRequest>(req.body);
   if (session) {
     auto sessions = state_->app_state->running_sessions->load();
-    auto session_id = std::stoul(session.value().session_id);
+    const auto &session_id = session.value().session_id;
     if (state::get_session_by_id(sessions.get(), session_id)) {
       this->state_->app_state->event_bus->fire_event(
           immer::box<events::PauseStreamEvent>(events::PauseStreamEvent{.session_id = session_id}));
@@ -471,7 +471,7 @@ void UnixSocketServer::endpoint_StreamSessionStop(const HTTPRequest &req, std::s
   auto session = rfl::json::read<StreamSessionStopRequest>(req.body);
   if (session) {
     auto sessions = state_->app_state->running_sessions->load();
-    auto session_id = std::stoul(session.value().session_id);
+    const auto &session_id = session.value().session_id;
     if (state::get_session_by_id(sessions.get(), session_id)) {
       this->state_->app_state->event_bus->fire_event(
           immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
@@ -494,7 +494,7 @@ void UnixSocketServer::endpoint_StreamSessionHandleInput(const HTTPRequest &req,
   auto input_request = rfl::json::read<StreamSessionHandleInputRequest>(req.body);
   if (input_request) {
     auto sessions = state_->app_state->running_sessions->load();
-    auto session_id = std::stoul(input_request.value().session_id);
+    const auto &session_id = input_request.value().session_id;
     if (auto session = state::get_session_by_id(sessions.get(), session_id)) {
       auto hex_pkt = input_request.value().input_packet_hex.get();
       auto pkt_parsed = crypto::hex_to_str(hex_pkt);
@@ -643,7 +643,7 @@ void UnixSocketServer::endpoint_RunnerStart(const wolf::api::HTTPRequest &req, s
   auto event = rfl::json::read<RunnerStartRequest>(req.body);
   if (event) {
     auto session = state::get_session_by_id(this->state_->app_state->running_sessions->load(),
-                                            std::stoul(event.value().session_id));
+                                            event.value().session_id);
     if (!session) {
       logs::log(logs::warning, "[API] Invalid session_id: {}", event.value().session_id);
       auto res = GenericErrorResponse{.error = "Invalid session_id"};

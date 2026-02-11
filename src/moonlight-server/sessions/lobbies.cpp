@@ -22,7 +22,7 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
   lobby.connected_sessions->update([session](const immer::vector<immer::box<std::string>> &connected_sessions) {
     return connected_sessions | //
            ranges::views::filter([session](const immer::box<std::string> &session_id) {
-             return *session_id != std::to_string(session.session_id);
+             return *session_id != session.session_id;
            }) | //
            ranges::to<immer::vector<immer::box<std::string>>>();
   });
@@ -37,7 +37,7 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
   events::JoypadList joypads = session.joypads->load();
   for (auto [_joypad_nr, joypad] : joypads) {
     // Plug them into original session
-    events::PlugDeviceEvent plug_ev{.session_id = std::to_string(session.session_id)};
+    events::PlugDeviceEvent plug_ev{.session_id = session.session_id};
     std::visit(
         [&plug_ev](auto &pad) {
           plug_ev.udev_events = pad.get_udev_events();
@@ -56,7 +56,7 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
   // Switch audio/video gstreamer stream producers
   ev_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
       events::SwitchStreamProducerEvents{.session_id = session.session_id,
-                                         .interpipe_src_id = std::to_string(session.session_id)}});
+                                         .interpipe_src_id = session.session_id}});
 
   if (lobby.stop_when_everyone_leaves && lobby.connected_sessions->load()->size() == 0) {
     // Nobody left in the lobby, and it's set to stop when everyone leaves
@@ -199,7 +199,7 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
 
         // Update the lobby with the new session
         lobby->connected_sessions->update([session](const immer::vector<immer::box<std::string>> &connected_sessions) {
-          return connected_sessions.push_back({std::to_string(session->session_id)});
+          return connected_sessions.push_back({session->session_id});
         });
 
         // switch mouse and keyboard in session to use the lobby wayland server
@@ -211,7 +211,7 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         // Switch over all joypads present in the session into the lobby
         events::JoypadList joypads = session->joypads->load();
         for (auto [_joypad_nr, joypad] : joypads) {
-          events::PlugDeviceEvent plug_ev{.session_id = std::to_string(session->session_id)};
+          events::PlugDeviceEvent plug_ev{.session_id = session->session_id};
           std::visit(
               [&plug_ev](auto &pad) {
                 plug_ev.udev_events = pad.get_udev_events();
@@ -221,7 +221,7 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
           app_state->event_bus->fire_event(immer::box<events::PlugDeviceEvent>(plug_ev));
           // Unplug it from the current session
           app_state->event_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
-              events::UnplugDeviceEvent{.session_id = std::to_string(session->session_id),
+              events::UnplugDeviceEvent{.session_id = session->session_id,
                                         .udev_events = plug_ev.udev_events,
                                         .udev_hw_db_entries = plug_ev.udev_hw_db_entries}});
 
@@ -269,7 +269,7 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         immer::vector<immer::box<std::string>> sessions = lobby->connected_sessions->load();
         for (auto &session_id : sessions) {
           app_state->event_bus->fire_event(immer::box<events::LeaveLobbyEvent>{
-              events::LeaveLobbyEvent{.lobby_id = lobby->id, .moonlight_session_id = std::stoul(*session_id)}});
+              events::LeaveLobbyEvent{.lobby_id = lobby->id, .moonlight_session_id = *session_id}});
         }
 
         // Finally, remove the lobby from the app_state
@@ -312,9 +312,9 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         }
       }));
 
-  auto on_moonlight_session_over = [app_state](std::size_t moonlight_session_id) {
+  auto on_moonlight_session_over = [app_state](const std::string &moonlight_session_id) {
     immer::vector<events::Lobby> lobbies = app_state->lobbies->load();
-    if (auto lobby = state::get_lobby_by_connected_session(lobbies, std::to_string(moonlight_session_id))) {
+    if (auto lobby = state::get_lobby_by_connected_session(lobbies, moonlight_session_id)) {
       logs::log(logs::info, "[LOBBY] Moonlight stream {} over, leaving lobby {}", moonlight_session_id, lobby->id);
       // Fire the LeaveLobbyEvent so that it can also be picked up by WolfUI via SSE
       app_state->event_bus->fire_event(immer::box<events::LeaveLobbyEvent>{

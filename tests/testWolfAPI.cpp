@@ -541,11 +541,11 @@ TEST_CASE("Lobbies APIs", "[API]") {
     REQUIRE(sessions.lobbies[0].connected_sessions.size() == 0);
   }
 
-  std::size_t moonlight_session_id = 1234;
+  std::string moonlight_session_id = "test-session-1234";
   { // Test joining a lobby
     // First, create a StreamSession
     running_sessions->update([moonlight_session_id](const immer::vector<events::StreamSession> &sessions) {
-      return sessions.push_back(events::StreamSession{.session_id = moonlight_session_id});
+      return sessions.push_back(events::StreamSession{.session_id = moonlight_session_id, .client_id = 1234});
     });
     // Then, call the join endpoint
     auto payload =
@@ -575,7 +575,7 @@ TEST_CASE("Lobbies APIs", "[API]") {
     REQUIRE(sessions.lobbies.size() == 1);
     REQUIRE_THAT(sessions.lobbies[0].id, Equals(lobby_id));
     REQUIRE(sessions.lobbies[0].connected_sessions.size() == 1);
-    REQUIRE_THAT(sessions.lobbies[0].connected_sessions[0], Equals(std::to_string(moonlight_session_id)));
+    REQUIRE_THAT(sessions.lobbies[0].connected_sessions[0], Equals(moonlight_session_id));
   }
 
   { // Test leaving a lobby
@@ -730,7 +730,7 @@ TEST_CASE("SSE APIs", "[API]") {
   std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the SSE client to start
 
   // Test out one of the events
-  event_bus->fire_event(events::IDRRequestEvent{.session_id = 42});
+  event_bus->fire_event(events::IDRRequestEvent{.session_id = "42"});
 
   auto event = queue->pop();
   REQUIRE(event.has_value());

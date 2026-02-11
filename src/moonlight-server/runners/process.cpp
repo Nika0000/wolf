@@ -48,7 +48,7 @@ void RunProcess::run(std::string_view session_id,
 
   auto terminate_handler = this->ev_bus->register_handler<immer::box<StopStreamEvent>>(
       [&group_proc, session_id](const immer::box<StopStreamEvent> &terminate_ev) {
-        if (std::to_string(terminate_ev->session_id) == session_id) {
+        if (terminate_ev->session_id == session_id) {
           group_proc.terminate(); // Manually terminate the process
         }
       });

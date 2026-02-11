@@ -179,7 +179,7 @@ struct CreateLobbyEvent {
 
 struct JoinLobbyEvent {
   const std::string lobby_id;
-  const std::size_t moonlight_session_id;
+  const std::string moonlight_session_id;
   std::optional<std::vector<short>> pin = std::nullopt;
   /**
    * A promise to know if there's been an error message
@@ -189,7 +189,7 @@ struct JoinLobbyEvent {
 
 struct LeaveLobbyEvent {
   const std::string lobby_id;
-  const std::size_t moonlight_session_id;
+  const std::string moonlight_session_id;
 };
 
 struct StopLobbyEvent {
@@ -244,7 +244,7 @@ struct VideoSession {
   std::string render_node;
 
   // A unique ID that identifies this session
-  std::size_t session_id;
+  std::string session_id;
 
   std::uint16_t port;
   int timeout_ms;
@@ -268,7 +268,7 @@ struct AudioSession {
   std::string gst_pipeline;
 
   // A unique ID that identifies this session
-  std::size_t session_id;
+  std::string session_id;
 
   bool encrypt_audio;
   std::string aes_key;
@@ -285,27 +285,27 @@ struct AudioSession {
 
 struct IDRRequestEvent {
   // A unique ID that identifies this session
-  std::size_t session_id;
+  std::string session_id;
 };
 
 struct PauseStreamEvent {
-  std::size_t session_id;
+  std::string session_id;
 };
 
 struct ResumeStreamEvent {
-  std::size_t session_id;
+  std::string session_id;
 };
 
 struct StopStreamEvent {
-  std::size_t session_id;
+  std::string session_id;
 };
 
 struct ClientWolfUIComboEvent {
-  std::size_t session_id;
+  std::string session_id;
 };
 
 struct SwitchStreamProducerEvents {
-  std::size_t session_id;
+  std::string session_id;
   /**
    * The source ID of the interpipe that will be used to produce the stream.
    */
@@ -430,7 +430,8 @@ struct StreamSession {
   std::string rtsp_fake_ip;
 
   // client info
-  std::size_t session_id;
+  std::string session_id;
+  std::size_t client_id; // The client ID that owns this session
   std::string ip;
 
   unsigned short video_stream_port;
