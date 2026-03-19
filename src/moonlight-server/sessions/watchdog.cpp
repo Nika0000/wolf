@@ -18,8 +18,7 @@ using namespace std::chrono_literals;
  * @returns Event bus handlers that must be kept alive for the lifetime of the watchdog.
  */
 immer::vector<immer::box<events::EventBusHandlers>>
-setup_idle_timeout_watchdog(const state::SessionsAtoms &sessions,
-                            std::shared_ptr<events::EventBusType> ev_bus) {
+setup_idle_timeout_watchdog(const state::SessionsAtoms &sessions, std::shared_ptr<events::EventBusType> ev_bus) {
   immer::vector_transient<immer::box<events::EventBusHandlers>> handlers;
 
   // Thread-safe set of session IDs for which a StopStreamEvent has already been fired
@@ -48,9 +47,9 @@ setup_idle_timeout_watchdog(const state::SessionsAtoms &sessions,
 
         auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
         auto idle_for_ns = now_ns - session.last_input_at_ns->load();
-        auto timeout_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                              std::chrono::seconds(*session.idle_timeout_seconds))
-                              .count();
+        auto timeout_ns =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(*session.idle_timeout_seconds))
+                .count();
         if (idle_for_ns >= timeout_ns) {
           logs::log(logs::info,
                     "[SESSION] Idle timeout reached for session {} ({}s), stopping stream",

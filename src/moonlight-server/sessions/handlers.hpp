@@ -27,8 +27,7 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
                        const std::optional<AudioServer> &audio_server);
 
 immer::vector<immer::box<events::EventBusHandlers>>
-setup_idle_timeout_watchdog(const state::SessionsAtoms &sessions,
-                            std::shared_ptr<events::EventBusType> ev_bus);
+setup_idle_timeout_watchdog(const state::SessionsAtoms &sessions, std::shared_ptr<events::EventBusType> ev_bus);
 
 struct RunnerArgs {
   const std::string &session_id;

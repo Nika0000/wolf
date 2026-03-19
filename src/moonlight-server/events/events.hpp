@@ -2,13 +2,13 @@
 
 #define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
 #define BOOST_THREAD_PROVIDES_FUTURE
+#include <atomic>
 #include <boost/thread.hpp>
 #include <boost/thread/future.hpp>
-#include <atomic>
+#include <chrono>
 #include <core/audio.hpp>
 #include <core/input.hpp>
 #include <core/virtual-display.hpp>
-#include <chrono>
 #include <cstddef>
 #include <eventbus/event_bus.hpp>
 #include <helpers/tsqueue.hpp>
@@ -452,10 +452,9 @@ struct StreamSession {
   unsigned short control_stream_port;
 
   std::optional<int> idle_timeout_seconds;
-  std::shared_ptr<std::atomic<std::int64_t>> last_input_at_ns =
-    std::make_shared<std::atomic<std::int64_t>>(
+  std::shared_ptr<std::atomic<std::int64_t>> last_input_at_ns = std::make_shared<std::atomic<std::int64_t>>(
       std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-        .count());
+          .count());
 
   /**
    * Optional: the wayland display for the current session.

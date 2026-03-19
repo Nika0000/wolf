@@ -185,8 +185,7 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
       "/api/v1/sessions/add",
       {
           .summary = "Create a new stream session",
-          .request_description =
-            APIDescription{.json_schema = rfl::json::to_schema<StreamSessionAddRequest>()},
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<StreamSessionAddRequest>()},
           .response_description = {{200, {.json_schema = rfl::json::to_schema<StreamSessionCreated>()}},
                                    {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
           .handler = [this](auto req, auto socket) { endpoint_StreamSessionAdd(req, socket); },

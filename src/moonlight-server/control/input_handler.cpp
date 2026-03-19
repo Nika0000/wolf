@@ -2,10 +2,10 @@
 
 #include <boost/endian/conversion.hpp>
 #include <boost/locale.hpp>
+#include <chrono>
 #include <control/input_handler.hpp>
 #include <events/events.hpp>
 #include <helpers/logger.hpp>
-#include <chrono>
 #include <immer/box.hpp>
 #include <platforms/input.hpp>
 #include <string>
