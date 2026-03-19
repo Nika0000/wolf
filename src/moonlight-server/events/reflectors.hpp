@@ -150,6 +150,9 @@ template <> struct Reflector<events::StreamSession> {
     int video_refresh_rate;
 
     int audio_channel_count;
+    std::optional<int> idle_timeout_seconds;
+    std::optional<bool> start_virtual_compositor;
+    std::optional<bool> start_audio_server;
 
     std::optional<std::string> session_id;
     std::optional<std::string> app_state_folder;
@@ -167,6 +170,9 @@ template <> struct Reflector<events::StreamSession> {
             .video_height = v.display_mode.height,
             .video_refresh_rate = v.display_mode.refreshRate,
             .audio_channel_count = v.audio_channel_count,
+            .idle_timeout_seconds = v.idle_timeout_seconds,
+            .start_virtual_compositor = v.app->start_virtual_compositor,
+            .start_audio_server = v.app->start_audio_server,
             .session_id = v.session_id,
             .app_state_folder = v.app_local_state_folder,
             .app_id = v.app->base.id,

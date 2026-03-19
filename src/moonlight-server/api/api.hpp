@@ -111,6 +111,8 @@ struct StreamSessionCreateRequest {
   rfl::Description<"Video height", int> video_height;
   rfl::Description<"Video refresh rate", int> video_refresh_rate;
   rfl::Description<"Audio channel count", int> audio_channel_count;
+  rfl::Description<"Idle timeout in seconds (optional, disabled if not provided)", std::optional<int>>
+      idle_timeout_seconds;
 
   rfl::Description<"Video producer buffer caps (optional, will use defaults if not provided)",
                    std::optional<std::string>>
@@ -139,6 +141,8 @@ struct StreamSessionCreated {
   bool success = true;
   std::string session_id;
 };
+
+using StreamSessionAddRequest = rfl::Reflector<events::StreamSession>::ReflType;
 
 struct StreamSessionListResponse {
   bool success = true;
@@ -169,7 +173,9 @@ struct StreamSessionHandleInputRequest {
 };
 
 struct CreateLobbyRequest {
-  rfl::Description<"The profile that originally created the lobby", std::string> profile_id;
+  rfl::Description<"The profile that originally created the lobby (optional, can be omitted when not using profiles)",
+                   std::optional<std::string>>
+      profile_id;
   std::string name;
   std::optional<std::string> icon_png_path;
   bool multi_user = true;

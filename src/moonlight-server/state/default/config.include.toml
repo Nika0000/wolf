@@ -29,15 +29,13 @@ base_create_json = '''{
     }'''
 devices = []
 env = [
-    'GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*',
-    'WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock',
-    'WOLF_UI_AUTOUPDATE=False',
-    'LOGLEVEL=INFO'
+  'GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*',
+  'WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock',
+  'WOLF_UI_AUTOUPDATE=False',
+  'LOGLEVEL=INFO',
 ]
 image = 'ghcr.io/games-on-whales/wolf-ui:main'
-mounts = [
-    '/var/run/wolf/wolf.sock:/var/run/wolf/wolf.sock'
-]
+mounts = ['/var/run/wolf/wolf.sock:/var/run/wolf/wolf.sock']
 name = 'Wolf-UI'
 ports = []
 type = 'docker'
@@ -78,9 +76,9 @@ name = "WolfFirefox"
 image = "ghcr.io/games-on-whales/firefox:edge"
 mounts = []
 env = [
-    "RUN_SWAY=1",
-    "MOZ_ENABLE_WAYLAND=1",
-    "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+  "RUN_SWAY=1",
+  "MOZ_ENABLE_WAYLAND=1",
+  "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
 ]
 devices = []
 ports = []
@@ -107,8 +105,8 @@ name = "WolfRetroarch"
 image = "ghcr.io/games-on-whales/retroarch:edge"
 mounts = []
 env = [
-    "RUN_SWAY=true",
-    "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+  "RUN_SWAY=true",
+  "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
 ]
 devices = []
 ports = []
@@ -135,9 +133,9 @@ name = "WolfSteam"
 image = "ghcr.io/games-on-whales/steam:edge"
 mounts = []
 env = [
-    "PROTON_LOG=1",
-    "RUN_SWAY=true",
-    "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+  "PROTON_LOG=1",
+  "RUN_SWAY=true",
+  "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
 ]
 devices = []
 ports = []
@@ -166,8 +164,8 @@ name = "WolfPegasus"
 image = "ghcr.io/games-on-whales/pegasus:edge"
 mounts = []
 env = [
-    "RUN_SWAY=1",
-    "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
+  "RUN_SWAY=1",
+  "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
 devices = []
 ports = []
@@ -194,8 +192,8 @@ name = "WolfLutris"
 image = "ghcr.io/games-on-whales/lutris:edge"
 mounts = ["lutris:/var/lutris/:rw"]
 env = [
-    "RUN_SWAY=1",
-    "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia* /var/lutris/",
+  "RUN_SWAY=1",
+  "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia* /var/lutris/",
 ]
 devices = []
 ports = []
@@ -222,8 +220,8 @@ name = "Prismlauncher"
 image = "ghcr.io/games-on-whales/prismlauncher:edge"
 mounts = []
 env = [
-    "RUN_SWAY=1",
-    "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia* /var/lutris/",
+  "RUN_SWAY=1",
+  "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia* /var/lutris/",
 ]
 devices = []
 ports = []
@@ -273,7 +271,11 @@ type = "docker"
 name = "WolfES-DE"
 image = "ghcr.io/games-on-whales/es-de:edge"
 mounts = []
-env = ["RUN_SWAY=1", "MOZ_ENABLE_WAYLAND=1", "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*", ]
+env = [
+  "RUN_SWAY=1",
+  "MOZ_ENABLE_WAYLAND=1",
+  "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+]
 devices = []
 ports = []
 base_create_json = """
@@ -296,7 +298,10 @@ icon_png_path = "https://games-on-whales.github.io/wildlife/apps/kodi/assets/ico
 type = 'docker'
 name = 'WolfKodi'
 image = 'ghcr.io/games-on-whales/kodi:edge'
-env = ['RUN_SWAY=true', 'GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*']
+env = [
+  'RUN_SWAY=true',
+  'GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*',
+]
 devices = []
 mounts = []
 ports = []
@@ -319,7 +324,7 @@ base_create_json = """
 
 [gstreamer.video]
 
-default_source = 'interpipesrc name=interpipesrc_{}_video listen-to={session_id}_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 leaky-type=downstream'
+default_source = 'interpipesrc name=interpipesrc_{session_id}_video listen-to={producer_id}_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 leaky-type=downstream'
 default_sink = """
 rtpmoonlightpay_video name=moonlight_pay \
 payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} !
@@ -544,10 +549,10 @@ video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 ###
 [gstreamer.audio]
 default_source = """
-interpipesrc name=interpipesrc_{}_audio listen-to={session_id}_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false\
+interpipesrc name=interpipesrc_{session_id}_audio listen-to={producer_id}_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false\
 """
 
-default_audio_params = "queue max-size-buffers=3 leaky=downstream ! audiorate ! audioconvert"
+default_audio_params = "queue max-size-buffers=3 leaky=downstream ! audiorate ! audioconvert ! audio/x-raw, channels={channels}"
 
 default_opus_encoder = """
 opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} bandwidth=fullband \
@@ -558,4 +563,5 @@ default_sink = """
 rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt} \
 aes_key="{aes_key}" aes_iv="{aes_iv}" !
 appsink name=wolf_udp_sink\
-""")for_c++_include"
+"""
+)for_c++_include"

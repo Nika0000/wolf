@@ -315,6 +315,9 @@ void UnixSocketServer::endpoint_StreamSessionCreate(const HTTPRequest &req, std:
 
   new_session->ip = ss.client_ip.value();
   new_session->rtsp_fake_ip = ss.rtsp_fake_ip.value();
+  if (auto timeout_seconds = ss.idle_timeout_seconds.get(); timeout_seconds && *timeout_seconds > 0) {
+    new_session->idle_timeout_seconds = *timeout_seconds;
+  }
 
   // Add session to running sessions
   state_->app_state->running_sessions->update(
@@ -362,8 +365,8 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
 
           .render_node = sample_app->render_node,
           .opus_gst_pipeline = sample_app->opus_gst_pipeline,
-          .start_virtual_compositor = true,
-          .start_audio_server = true,
+          .start_virtual_compositor = ss.start_virtual_compositor.value_or(true),
+          .start_audio_server = ss.start_audio_server.value_or(true),
 
           .runner = std::make_shared<process::RunProcess>(state_->app_state->event_bus,
                                                           "sh -c \"while :; do echo 'running...'; sleep 10; done\"")};
@@ -400,6 +403,9 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
         ss.aes_iv);
     new_session->ip = ss.client_ip;
     new_session->rtsp_fake_ip = ss.rtsp_fake_ip;
+    if (ss.idle_timeout_seconds && *ss.idle_timeout_seconds > 0) {
+      new_session->idle_timeout_seconds = *ss.idle_timeout_seconds;
+    }
 
     state_->app_state->running_sessions->update(
         [new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(*new_session); });
@@ -530,7 +536,7 @@ void UnixSocketServer::endpoint_LobbyCreate(const wolf::api::HTTPRequest &req, s
     auto lobby_id = state::gen_uuid();
     auto create_lobby_ev = events::CreateLobbyEvent{
         .id = lobby_id,
-        .profile_id = event.value().profile_id.get(),
+        .profile_id = event.value().profile_id.get().value_or(""),
         .name = event.value().name,
         .icon_png_path = event.value().icon_png_path,
         .pin = event.value().pin.get(),

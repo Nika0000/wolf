@@ -52,7 +52,8 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
   }
   // TODO: hotplug pen_tablet and touch_screen
 
-  // Switch audio/video gstreamer stream producers
+  // Switch audio/video gstreamer stream producers back to the session's own pipeline
+  session.producer_id->store(session.session_id);
   ev_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
       events::SwitchStreamProducerEvents{.session_id = session.session_id, .interpipe_src_id = session.session_id}});
 
@@ -229,6 +230,10 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         // TODO: hotplug pen_tablet
 
         // Switch audio/video gstreamer stream producers
+        // Update producer_id BEFORE firing the event so that any pipeline
+        // created after this point (RTSP hasn't happened yet) uses the
+        // correct lobby interpipe source from the very first frame.
+        session->producer_id->store(lobby->id);
         app_state->event_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
             events::SwitchStreamProducerEvents{.session_id = session->session_id, .interpipe_src_id = lobby->id}});
         join_lobby_event->error_message.get()->set_value("");

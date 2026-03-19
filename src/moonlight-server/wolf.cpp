@@ -203,6 +203,8 @@ void run() {
     control::run_control(state::get_port(state::CONTROL_PORT), sessions, ev_bus);
   }).detach();
 
+  sessions::setup_idle_timeout_watchdog(local_state->running_sessions, local_state->event_bus);
+
   // RTP
   rtp::start_rtp_ping(state::get_port(state::VIDEO_PING_PORT),
                       state::get_port(state::AUDIO_PING_PORT),

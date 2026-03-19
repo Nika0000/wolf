@@ -130,7 +130,10 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
       .audio_stream_port = static_cast<unsigned short>(get_port(AUDIO_PING_PORT)),
       .control_stream_port = static_cast<unsigned short>(get_port(CONTROL_PORT))};
 
-  return std::make_shared<events::StreamSession>(session);
+  auto sess = std::make_shared<events::StreamSession>(session);
+  // Initialize producer_id to session_id (updated to lobby ID when joining a lobby)
+  sess->producer_id->store(sess->session_id);
+  return sess;
 }
 
 inline immer::vector<events::StreamSession> remove_session(const immer::vector<events::StreamSession> &sessions,

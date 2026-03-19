@@ -4,9 +4,11 @@
 #define BOOST_THREAD_PROVIDES_FUTURE
 #include <boost/thread.hpp>
 #include <boost/thread/future.hpp>
+#include <atomic>
 #include <core/audio.hpp>
 #include <core/input.hpp>
 #include <core/virtual-display.hpp>
+#include <chrono>
 #include <cstddef>
 #include <eventbus/event_bus.hpp>
 #include <helpers/tsqueue.hpp>
@@ -245,6 +247,12 @@ struct VideoSession {
 
   // A unique ID that identifies this session
   std::string session_id;
+  /**
+   * The interpipe source to listen to for this session.
+   * Normally equal to session_id, but set to the lobby ID when joining a lobby
+   * so that the encoder reads frames from the lobby's Wayland compositor.
+   */
+  std::string producer_id;
 
   std::uint16_t port;
   int timeout_ms;
@@ -269,6 +277,11 @@ struct AudioSession {
 
   // A unique ID that identifies this session
   std::string session_id;
+  /**
+   * The interpipe source to listen to for this session.
+   * Normally equal to session_id, but set to the lobby ID when joining a lobby.
+   */
+  std::string producer_id;
 
   bool encrypt_audio;
   std::string aes_key;
@@ -438,6 +451,12 @@ struct StreamSession {
   unsigned short audio_stream_port;
   unsigned short control_stream_port;
 
+  std::optional<int> idle_timeout_seconds;
+  std::shared_ptr<std::atomic<std::int64_t>> last_input_at_ns =
+    std::make_shared<std::atomic<std::int64_t>>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+        .count());
+
   /**
    * Optional: the wayland display for the current session.
    * Will be only set during an active streaming and destroyed on stream end.
@@ -458,6 +477,13 @@ struct StreamSession {
 
   std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =
       std::make_shared<std::optional<input::PenTablet>>(); /* Optional, will be set on first use */
+
+  /**
+   * Tracks the current interpipe producer for this session.
+   * Equals session_id by default; switched to a lobby ID on lobby join and restored on leave.
+   * Shared so the lobby handler can update it after StreamSession is copied.
+   */
+  std::shared_ptr<immer::atom<std::string>> producer_id = std::make_shared<immer::atom<std::string>>("");
 };
 
 } // namespace wolf::core::events

@@ -5,6 +5,7 @@
 #include <control/input_handler.hpp>
 #include <events/events.hpp>
 #include <helpers/logger.hpp>
+#include <chrono>
 #include <immer/box.hpp>
 #include <platforms/input.hpp>
 #include <string>
@@ -720,6 +721,10 @@ void controller_battery(const CONTROLLER_BATTERY_PACKET &pkt, events::StreamSess
 void handle_input(events::StreamSession &session,
                   immer::box<std::shared_ptr<ENetPeer>> connected_client,
                   INPUT_PKT *pkt) {
+  session.last_input_at_ns->store(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+
   switch (pkt->type) {
   case MOUSE_MOVE_REL: {
     logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_MOVE_REL");

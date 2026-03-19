@@ -272,6 +272,7 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
 
   auto pipeline = fmt::format(fmt::runtime(video_session->gst_pipeline),
                               fmt::arg("session_id", video_session->session_id),
+                              fmt::arg("producer_id", video_session->producer_id),
                               fmt::arg("width", video_session->display_mode.width),
                               fmt::arg("height", video_session->display_mode.height),
                               fmt::arg("fps", video_session->display_mode.refreshRate),
@@ -391,6 +392,7 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
   auto pipeline = fmt::format(
       fmt::runtime(audio_session->gst_pipeline),
       fmt::arg("session_id", audio_session->session_id),
+      fmt::arg("producer_id", audio_session->producer_id),
       fmt::arg("channels", audio_session->audio_mode.channels),
       fmt::arg("bitrate", audio_session->audio_mode.bitrate),
       // TODO: opusenc hardcodes those two

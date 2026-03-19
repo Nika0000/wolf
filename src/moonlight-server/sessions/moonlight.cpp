@@ -159,14 +159,20 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         auto w_display_ready = on_ready->get_future().then([session](auto fut) {
           streaming::WaylandDisplayReady ready = fut.get();
 
-          auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin, ready.wayland_socket_name);
-          // Set the wayland display
-          session->wayland_display->store(wl_state);
+          if (!ready.wayland_socket_name.empty()) {
+            // A real wayland compositor was started: bind all virtual input devices to it.
+            // Skip this when start_virtual_compositor=false (socket_name is empty); in that
+            // case the lobby join will have already set the correct WaylandMouse/Keyboard/
+            // TouchScreen and we must not overwrite them here.
+            auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin, ready.wayland_socket_name);
+            // Set the wayland display
+            session->wayland_display->store(wl_state);
 
-          // Set virtual devices
-          session->mouse->emplace(virtual_display::WaylandMouse(wl_state));
-          session->keyboard->emplace(virtual_display::WaylandKeyboard(wl_state));
-          session->touch_screen->emplace(virtual_display::WaylandTouchScreen(wl_state));
+            // Set virtual devices
+            session->mouse->emplace(virtual_display::WaylandMouse(wl_state));
+            session->keyboard->emplace(virtual_display::WaylandKeyboard(wl_state));
+            session->touch_screen->emplace(virtual_display::WaylandTouchScreen(wl_state));
+          }
 
           logs::log(logs::debug, "[STREAM_SESSION] Start runner");
           session->event_bus->fire_event(immer::box<events::StartRunner>(
