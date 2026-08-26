@@ -235,6 +235,34 @@ bool DockerAPI::stop_by_id(std::string_view id, int timeout_seconds) const {
   return false;
 }
 
+bool DockerAPI::pause_by_id(std::string_view id) const {
+  if (auto conn = docker_connect(socket_path)) {
+    auto raw_msg =
+        req(conn.value().get(), POST, fmt::format("http://localhost/{}/containers/{}/pause", docker_api_version, id));
+    if (raw_msg && (raw_msg->first == 204 || raw_msg->first == 304)) {
+      return true;
+    } else if (raw_msg) {
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
+    }
+  }
+
+  return false;
+}
+
+bool DockerAPI::unpause_by_id(std::string_view id) const {
+  if (auto conn = docker_connect(socket_path)) {
+    auto raw_msg = req(
+        conn.value().get(), POST, fmt::format("http://localhost/{}/containers/{}/unpause", docker_api_version, id));
+    if (raw_msg && (raw_msg->first == 204 || raw_msg->first == 304)) {
+      return true;
+    } else if (raw_msg) {
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
+    }
+  }
+
+  return false;
+}
+
 bool DockerAPI::remove_by_id(std::string_view id, bool remove_volumes, bool force, bool link) const {
   if (auto conn = docker_connect(socket_path)) {
     auto api_url = fmt::format("http://localhost/{}/containers/{}?v={}&force={}&link={}",
@@ -425,6 +453,28 @@ DockerAPI::get_logs(std::string_view id, bool get_stdout, bool get_stderr, int s
   return "";
 }
 
+/**
+ * Docker multiplexes stdout/stderr into frames of [8 byte header][payload] when Tty is disabled.
+ * See: https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerAttach
+ */
+std::string demux_docker_stream(std::string_view raw) {
+  std::string output;
+  std::size_t i = 0;
+  while (i + 8 <= raw.size()) {
+    uint32_t frame_size = (static_cast<unsigned char>(raw[i + 4]) << 24) | //
+                          (static_cast<unsigned char>(raw[i + 5]) << 16) | //
+                          (static_cast<unsigned char>(raw[i + 6]) << 8) |  //
+                          (static_cast<unsigned char>(raw[i + 7]));
+    i += 8;
+    if (i + frame_size > raw.size()) {
+      break;
+    }
+    output.append(raw, i, frame_size);
+    i += frame_size;
+  }
+  return output;
+}
+
 bool DockerAPI::exec(std::string_view id, const std::vector<std::string_view> &command, std::string_view user) const {
   if (auto conn = docker_connect(socket_path)) {
     auto api_url = fmt::format("http://localhost/{}/containers/{}/exec", docker_api_version, id);
@@ -469,6 +519,134 @@ bool DockerAPI::exec(std::string_view id, const std::vector<std::string_view> &c
   }
 
   return false;
+}
+
+std::optional<DockerAPI::ExecResult>
+DockerAPI::exec_capture(std::string_view id, const std::vector<std::string_view> &command, std::string_view user) const {
+  if (auto conn = docker_connect(socket_path)) {
+    auto api_url = fmt::format("http://localhost/{}/containers/{}/exec", docker_api_version, id);
+    auto post_params = json::object{
+        {"Cmd", command},
+        {"User", user},
+        {"AttachStdin", false},
+        {"AttachStdout", true},
+        {"AttachStderr", true},
+    };
+    auto json_payload = json::serialize(post_params);
+    auto raw_msg = req(conn.value().get(), POST, api_url, json_payload);
+    if (raw_msg && raw_msg->first == 201) {
+      auto json = parse_json(raw_msg->second);
+      std::string exec_id = json.at("Id").as_string().data();
+      api_url = fmt::format("http://localhost/{}/exec/{}/start", docker_api_version, exec_id);
+      post_params = json::object{{"Detach", false}, {"Tty", false}};
+      json_payload = json::serialize(post_params);
+      raw_msg = req(conn.value().get(), POST, api_url, json_payload);
+      if (raw_msg && raw_msg->first == 200) {
+        auto output = demux_docker_stream(raw_msg->second);
+        api_url = fmt::format("http://localhost/{}/exec/{}/json", docker_api_version, exec_id);
+        raw_msg = req(conn.value().get(), GET, api_url);
+        if (raw_msg && raw_msg->first == 200) {
+          json = parse_json(raw_msg->second);
+          auto exit_code = json.at("ExitCode").as_int64();
+          return ExecResult{.exit_code = static_cast<int>(exit_code), .output = output};
+        }
+      }
+    }
+
+    if (raw_msg) {
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
+    }
+  }
+
+  return std::nullopt;
+}
+
+std::optional<int> DockerAPI::exec_stream(std::string_view id,
+                                          const std::vector<std::string_view> &command,
+                                          const std::function<void(std::string_view)> &output_fn,
+                                          std::string_view user) const {
+  if (auto conn = docker_connect(socket_path)) {
+    auto api_url = fmt::format("http://localhost/{}/containers/{}/exec", docker_api_version, id);
+    auto post_params = json::object{
+        {"Cmd", command},
+        {"User", user},
+        {"AttachStdin", false},
+        {"AttachStdout", true},
+        {"AttachStderr", true},
+    };
+    auto json_payload = json::serialize(post_params);
+    auto raw_msg = req(conn.value().get(), POST, api_url, json_payload);
+    if (!raw_msg || raw_msg->first != 201) {
+      if (raw_msg) {
+        logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
+      }
+      return std::nullopt;
+    }
+
+    auto json = parse_json(raw_msg->second);
+    std::string exec_id = json.at("Id").as_string().data();
+
+    struct ExecStreamState {
+      std::string buffer;
+      const std::function<void(std::string_view)> &output_fn;
+    };
+    ExecStreamState state{.output_fn = output_fn};
+
+    // Demux Docker's stdout/stderr frames ([8 byte header][payload]) as they stream in, forwarding each complete
+    // frame's payload immediately instead of waiting for the whole response like exec_capture() does.
+    auto write_callback = +[](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
+      auto *st = static_cast<ExecStreamState *>(userdata);
+      const size_t data_size = size * nmemb;
+      st->buffer.append(ptr, data_size);
+
+      std::size_t i = 0;
+      while (i + 8 <= st->buffer.size()) {
+        uint32_t frame_size = (static_cast<unsigned char>(st->buffer[i + 4]) << 24) | //
+                              (static_cast<unsigned char>(st->buffer[i + 5]) << 16) | //
+                              (static_cast<unsigned char>(st->buffer[i + 6]) << 8) |  //
+                              (static_cast<unsigned char>(st->buffer[i + 7]));
+        if (i + 8 + frame_size > st->buffer.size()) {
+          break; // incomplete frame, wait for more data
+        }
+        st->output_fn(std::string_view{st->buffer}.substr(i + 8, frame_size));
+        i += 8 + frame_size;
+      }
+      st->buffer.erase(0, i);
+      return data_size;
+    };
+
+    auto start_url = fmt::format("http://localhost/{}/exec/{}/start", docker_api_version, exec_id);
+    auto start_body = json::serialize(json::object{{"Detach", false}, {"Tty", false}});
+
+    curl_easy_setopt(conn->get(), CURLOPT_URL, start_url.c_str());
+    curl_easy_setopt(conn->get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(conn->get(), CURLOPT_POST, 1L);
+    curl_easy_setopt(conn->get(), CURLOPT_POSTFIELDS, start_body.c_str());
+    curl_easy_setopt(conn->get(), CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(conn->get(), CURLOPT_WRITEDATA, &state);
+
+    struct curl_slist *headers = nullptr;
+    headers = curl_slist_append(headers, "Transfer-Encoding: chunked");
+    headers = curl_slist_append(headers, "Content-type: application/json");
+    curl_easy_setopt(conn->get(), CURLOPT_HTTPHEADER, headers);
+
+    CURLcode res = curl_easy_perform(conn->get());
+    curl_slist_free_all(headers);
+
+    if (res != CURLE_OK) {
+      logs::log(logs::warning, "[DOCKER] exec stream failed: {}", curl_easy_strerror(res));
+      return std::nullopt;
+    }
+
+    api_url = fmt::format("http://localhost/{}/exec/{}/json", docker_api_version, exec_id);
+    raw_msg = req(conn.value().get(), GET, api_url);
+    if (raw_msg && raw_msg->first == 200) {
+      json = parse_json(raw_msg->second);
+      return static_cast<int>(json.at("ExitCode").as_int64());
+    }
+  }
+
+  return std::nullopt;
 }
 
 std::string DockerAPI::get_api_version() {

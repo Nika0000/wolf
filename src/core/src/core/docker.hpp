@@ -120,6 +120,20 @@ public:
   bool stop_by_id(std::string_view id, int timeout_seconds = 2) const;
 
   /**
+   * Pauses the container
+   *
+   * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerPause
+   */
+  bool pause_by_id(std::string_view id) const;
+
+  /**
+   * Unpauses the container
+   *
+   * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerUnpause
+   */
+  bool unpause_by_id(std::string_view id) const;
+
+  /**
    * Removes the container
    *
    * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerDelete
@@ -160,6 +174,26 @@ public:
                   const std::function<void(const DockerProgressEvent &)> &progress_fn) const;
 
   bool exec(std::string_view id, const std::vector<std::string_view> &command, std::string_view user = "root") const;
+
+  struct ExecResult {
+    int exit_code;
+    std::string output;
+  };
+
+  /**
+   * Same as exec() but captures and returns the combined stdout/stderr output together with the exit code.
+   */
+  [[nodiscard]] std::optional<ExecResult>
+  exec_capture(std::string_view id, const std::vector<std::string_view> &command, std::string_view user = "root") const;
+
+  /**
+   * Same as exec() but streams the demuxed stdout/stderr to `output_fn` as it becomes available, useful for
+   * long-running or interactive commands. Returns the exit code once the command completes.
+   */
+  [[nodiscard]] std::optional<int> exec_stream(std::string_view id,
+                                               const std::vector<std::string_view> &command,
+                                               const std::function<void(std::string_view)> &output_fn,
+                                               std::string_view user = "root") const;
 
   /**
    * Get the container logs

@@ -6,6 +6,7 @@
 #include <rfl/toml.hpp>
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
+#include <state/sessions.hpp>
 
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::Equals;
@@ -396,6 +397,7 @@ TEST_CASE("Sessions APIs", "[API]") {
   response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/add", rfl::json::write(session));
   REQUIRE(response);
   REQUIRE_THAT(response->second, Catch::Matchers::ContainsSubstring("{\"success\":true,\"session_id\":"));
+  auto session_id = rfl::json::read<StreamSessionCreated>(response->second).value().session_id;
 
   // Test that the new session is in the list
   response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
@@ -415,15 +417,34 @@ TEST_CASE("Sessions APIs", "[API]") {
   // REQUIRE(response);
   // REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
 
-  // Test that we can pause a session
-  auto pause_request = StreamSessionPauseRequest{.session_id = "10594003729173467913"};
+  // Test that we can pause a runner
+  auto test_runner = wolf::core::events::RunnerTypes(
+      wolf::config::AppDocker{.name = "test", .image = "test", .mounts = {}, .env = {}, .devices = {}, .ports = {}});
+  auto pause_request = RunnerPauseRequest{.runner = test_runner, .session_id = session_id};
   response =
-      req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/pause", rfl::json::write(pause_request));
+      req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/runners/pause", rfl::json::write(pause_request));
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+  REQUIRE(state::get_session_by_id(running_sessions->load().get(), session_id)->paused->load());
+
+  // Test that we can resume a paused runner
+  auto resume_request = RunnerResumeRequest{.runner = test_runner, .session_id = session_id};
+  response =
+      req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/runners/resume", rfl::json::write(resume_request));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+  REQUIRE_FALSE(state::get_session_by_id(running_sessions->load().get(), session_id)->paused->load());
+
+  // Resuming an unknown session must fail
+  response = req(curl.get(),
+                 HTTPMethod::POST,
+                 "http://localhost/api/v1/runners/resume",
+                 rfl::json::write(RunnerResumeRequest{.runner = test_runner, .session_id = "not-a-session"}));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, ContainsSubstring("Invalid session_id"));
 
   // Test that we can stop a session
-  auto stop_request = StreamSessionStopRequest{.session_id = "10594003729173467913"};
+  auto stop_request = StreamSessionStopRequest{.session_id = session_id};
   response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/stop", rfl::json::write(stop_request));
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));

@@ -119,6 +119,21 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
                                              {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
                     .handler = [this](auto req, auto socket) { endpoint_RemoveApp(req, socket); }});
 
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/apps/state/delete",
+      {
+          .summary = "Permanently delete an app's on-disk state for a client",
+          .description = "Force-removes the runner container backing any running session for this client/app "
+                         "pair and deletes its on-disk state folder from the host, regardless of whether a "
+                         "session is currently running. This is irreversible.",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<AppStateDeleteRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {404, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_AppStateDelete(req, socket); },
+      });
+
   /**
    * Profiles API
    */
@@ -217,13 +232,28 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
 
   state_->http.add(
       HTTPMethod::POST,
-      "/api/v1/sessions/pause",
+      "/api/v1/runners/pause",
       {
-          .summary = "Pause a stream session",
-          .request_description = APIDescription{.json_schema = rfl::json::to_schema<StreamSessionPauseRequest>()},
+          .summary = "Pause a runner",
+          .description = "Freezes the runner's container (via Docker pause) and marks the session as paused. "
+                         "A paused session doesn't count towards its idle timeout.",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<RunnerPauseRequest>()},
           .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
                                    {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
-          .handler = [this](auto req, auto socket) { endpoint_StreamSessionPause(req, socket); },
+          .handler = [this](auto req, auto socket) { endpoint_RunnerPause(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/runners/resume",
+      {
+          .summary = "Resume a runner",
+          .description = "Unfreezes the runner's container (via Docker unpause), clears the paused state and "
+                         "restarts the idle timeout countdown.",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<RunnerResumeRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_RunnerResume(req, socket); },
       });
 
   state_->http.add(
@@ -246,6 +276,22 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
           .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
                                    {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
           .handler = [this](auto req, auto socket) { endpoint_StreamSessionHandleInput(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/runners/exec",
+      {
+          .summary = "Execute a command in a running session's runner (container)",
+          .description = "This endpoint executes a command inside the Docker container backing a running stream "
+                         "session, similar to `docker exec`. The response is a stream of newline-delimited JSON "
+                         "objects: zero or more RunnerExecOutputEvent chunks as output becomes available, "
+                         "followed by a final RunnerExecResponse with the exit code.",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<RunnerExecRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<RunnerExecResponse>()}},
+                                   {404, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_RunnerExec(req, socket); },
       });
 
   state_->http.add(HTTPMethod::POST,

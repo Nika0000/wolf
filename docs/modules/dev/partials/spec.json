@@ -143,6 +143,34 @@
         }
       }
     },
+    "/api/v1/serverinfo": {
+      "get": {
+        "summary": "Get server information",
+        "description": "This endpoint returns Moonlight server information including supported codecs, RTSP port, and other server capabilities.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__ServerInfoResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/sessions": {
       "get": {
         "summary": "Get all stream sessions",
@@ -228,6 +256,55 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/apps/state/delete": {
+      "post": {
+        "summary": "Permanently delete an app's on-disk state for a client",
+        "description": "Force-removes the runner container backing any running session for this client/app pair and deletes its on-disk state folder from the host, regardless of whether a session is currently running. This is irreversible.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__AppStateDeleteRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
                 }
               }
             },
@@ -617,6 +694,133 @@
         }
       }
     },
+    "/api/v1/runners/exec": {
+      "post": {
+        "summary": "Execute a command in a running session's runner (container)",
+        "description": "This endpoint executes a command inside the Docker container backing a running stream session, similar to `docker exec`. The response is a stream of newline-delimited JSON objects: zero or more RunnerExecOutputEvent chunks as output becomes available, followed by a final RunnerExecResponse with the exit code.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__RunnerExecRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__RunnerExecResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/runners/pause": {
+      "post": {
+        "summary": "Pause a runner",
+        "description": "Freezes the runner's container (via Docker pause) and marks the session as paused. A paused session doesn't count towards its idle timeout.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__RunnerPauseRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/runners/resume": {
+      "post": {
+        "summary": "Resume a runner",
+        "description": "Unfreezes the runner's container (via Docker unpause), clears the paused state and restarts the idle timeout countdown.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__RunnerResumeRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/runners/start": {
       "post": {
         "summary": "Start a runner in a given session",
@@ -695,15 +899,15 @@
         }
       }
     },
-    "/api/v1/sessions/input": {
+    "/api/v1/sessions/create": {
       "post": {
-        "summary": "Handle input for a stream session",
-        "description": "",
+        "summary": "Create a new stream session with custom configuration",
+        "description": "This endpoint creates a stream session with full control over video/audio pipelines, runner configuration, and client settings. Use this for advanced session creation.",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/wolf__api__StreamSessionHandleInputRequest"
+                "$ref": "#/components/schemas/wolf__api__StreamSessionCreateRequest"
               }
             }
           },
@@ -715,7 +919,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                  "$ref": "#/components/schemas/wolf__api__StreamSessionCreated"
                 }
               }
             },
@@ -734,15 +938,15 @@
         }
       }
     },
-    "/api/v1/sessions/pause": {
+    "/api/v1/sessions/input": {
       "post": {
-        "summary": "Pause a stream session",
+        "summary": "Handle input for a stream session",
         "description": "",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/wolf__api__StreamSessionPauseRequest"
+                "$ref": "#/components/schemas/wolf__api__StreamSessionHandleInputRequest"
               }
             }
           },
@@ -1086,6 +1290,66 @@
           "audio_channel_count": {
             "type": "integer"
           },
+          "idle_timeout_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paused": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_virtual_compositor": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_audio_server": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "app_state_folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "app_id": {
             "anyOf": [
               {
@@ -1157,12 +1421,36 @@
           "apps"
         ]
       },
+      "wolf__api__AppStateDeleteRequest": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "description": "The paired client whose app state should be removed"
+          },
+          "app_id": {
+            "type": "string",
+            "description": "The app whose on-disk state should be removed"
+          }
+        },
+        "required": [
+          "client_id",
+          "app_id"
+        ]
+      },
       "wolf__api__CreateLobbyRequest": {
         "type": "object",
         "properties": {
           "profile_id": {
-            "type": "string",
-            "description": "The profile that originally created the lobby"
+            "description": "The profile that originally created the lobby (optional, can be omitted when not using profiles)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "name": {
             "type": "string"
@@ -1513,6 +1801,121 @@
           "id"
         ]
       },
+      "wolf__api__RunnerExecRequest": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "The session ID whose running container the command will be executed in"
+          },
+          "command": {
+            "type": "array",
+            "description": "The command to run, as argv (e.g. [\"/bin/bash\", \"-c\", \"echo hi\"])",
+            "items": {
+              "type": "string"
+            }
+          },
+          "user": {
+            "description": "The user to run the command as (optional, defaults to root)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stream": {
+            "description": "If true, the response is a stream of newline-delimited JSON: zero or more RunnerExecOutputEvent chunks followed by a final RunnerExecResponse. If false (default), the command runs to completion and a single RunnerExecResponse with the full output is returned.",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "session_id",
+          "command",
+          "user",
+          "stream"
+        ]
+      },
+      "wolf__api__RunnerExecResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "output": {
+            "description": "Full combined stdout/stderr output. Only populated when streamed is false.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "success",
+          "exit_code",
+          "output"
+        ]
+      },
+      "wolf__api__RunnerPauseRequest": {
+        "type": "object",
+        "properties": {
+          "runner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/wolf__config__AppCMD__tagged"
+              },
+              {
+                "$ref": "#/components/schemas/wolf__config__AppDocker__tagged"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner",
+          "session_id"
+        ]
+      },
+      "wolf__api__RunnerResumeRequest": {
+        "type": "object",
+        "properties": {
+          "runner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/wolf__config__AppCMD__tagged"
+              },
+              {
+                "$ref": "#/components/schemas/wolf__config__AppDocker__tagged"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner",
+          "session_id"
+        ]
+      },
       "wolf__api__RunnerStartRequest": {
         "type": "object",
         "properties": {
@@ -1537,6 +1940,255 @@
           "stop_stream_when_over",
           "runner",
           "session_id"
+        ]
+      },
+      "wolf__api__ServerInfoResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "unique_id": {
+            "type": "string",
+            "description": "Server ID"
+          },
+          "hostname": {
+            "type": "string",
+            "description": "Server Hostname"
+          },
+          "app_version": {
+            "type": "string",
+            "description": "App version"
+          },
+          "gfe_version": {
+            "type": "string",
+            "description": "GFE version"
+          },
+          "max_luma_pixels": {
+            "type": "integer",
+            "description": "Max luma pixels HEVC"
+          },
+          "codec_mode_support": {
+            "type": "integer",
+            "description": "Server codec mode support"
+          },
+          "rtsp_port": {
+            "type": "integer",
+            "description": "RTSP Session Port"
+          }
+        },
+        "required": [
+          "success",
+          "unique_id",
+          "hostname",
+          "app_version",
+          "gfe_version",
+          "max_luma_pixels",
+          "codec_mode_support",
+          "rtsp_port"
+        ]
+      },
+      "wolf__api__StreamSessionCreateRequest": {
+        "type": "object",
+        "properties": {
+          "client_ip": {
+            "type": "string",
+            "description": "Client IP address"
+          },
+          "aes_key": {
+            "type": "string",
+            "description": "AES encryption key"
+          },
+          "aes_iv": {
+            "type": "string",
+            "description": "AES initialization vector"
+          },
+          "rtsp_fake_ip": {
+            "type": "string",
+            "description": "RTSP fake IP for IP-less connections"
+          },
+          "video_width": {
+            "type": "integer",
+            "description": "Video width"
+          },
+          "video_height": {
+            "type": "integer",
+            "description": "Video height"
+          },
+          "video_refresh_rate": {
+            "type": "integer",
+            "description": "Video refresh rate"
+          },
+          "audio_channel_count": {
+            "type": "integer",
+            "description": "Audio channel count"
+          },
+          "idle_timeout_seconds": {
+            "description": "Idle timeout in seconds (optional, disabled if not provided)",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "video_producer_buffer_caps": {
+            "description": "Video producer buffer caps (optional, will use defaults if not provided)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "h264_gst_pipeline": {
+            "description": "H264 GStreamer pipeline (optional, will use defaults if not provided)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hevc_gst_pipeline": {
+            "description": "HEVC GStreamer pipeline (optional, will use defaults if not provided)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "av1_gst_pipeline": {
+            "description": "AV1 GStreamer pipeline (optional, will use defaults if not provided)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "render_node": {
+            "description": "Render node (optional, will use defaults if not provided)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opus_gst_pipeline": {
+            "description": "Opus GStreamer pipeline (optional, will use defaults if not provided)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_virtual_compositor": {
+            "description": "Start virtual compositor (optional, defaults to true)",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_audio_server": {
+            "description": "Start audio server (optional, defaults to true)",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runner": {
+            "description": "Runner configuration",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/wolf__config__AppCMD__tagged"
+              },
+              {
+                "$ref": "#/components/schemas/wolf__config__AppDocker__tagged"
+              }
+            ]
+          },
+          "client_settings": {
+            "description": "Client settings (optional)",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/wolf__config__ClientSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "client_id": {
+            "description": "Client ID (optional, will create dummy client if not provided)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "app_state_folder": {
+            "description": "App state folder (optional)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "client_ip",
+          "aes_key",
+          "aes_iv",
+          "rtsp_fake_ip",
+          "video_width",
+          "video_height",
+          "video_refresh_rate",
+          "audio_channel_count",
+          "idle_timeout_seconds",
+          "video_producer_buffer_caps",
+          "h264_gst_pipeline",
+          "hevc_gst_pipeline",
+          "av1_gst_pipeline",
+          "render_node",
+          "opus_gst_pipeline",
+          "start_virtual_compositor",
+          "start_audio_server",
+          "runner",
+          "client_settings",
+          "client_id",
+          "app_state_folder"
         ]
       },
       "wolf__api__StreamSessionCreated": {
@@ -1586,17 +2238,6 @@
         "required": [
           "success",
           "sessions"
-        ]
-      },
-      "wolf__api__StreamSessionPauseRequest": {
-        "type": "object",
-        "properties": {
-          "session_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "session_id"
         ]
       },
       "wolf__api__StreamSessionStartRequest": {
@@ -1847,7 +2488,10 @@
             "type": "string"
           },
           "session_id": {
-            "type": "integer"
+            "type": "string"
+          },
+          "producer_id": {
+            "type": "string"
           },
           "encrypt_audio": {
             "type": "boolean"
@@ -1872,8 +2516,8 @@
             "items": {
               "type": "integer"
             },
-            "minItems": "16",
-            "maxItems": "16"
+            "minItems": 16,
+            "maxItems": 16
           },
           "packet_duration": {
             "type": "integer"
@@ -1885,6 +2529,7 @@
         "required": [
           "gst_pipeline",
           "session_id",
+          "producer_id",
           "encrypt_audio",
           "aes_key",
           "aes_iv",
@@ -1914,7 +2559,7 @@
             "type": "string"
           },
           "moonlight_session_id": {
-            "type": "integer"
+            "type": "string"
           },
           "pin": {
             "anyOf": [
@@ -1942,7 +2587,7 @@
             "type": "string"
           },
           "moonlight_session_id": {
-            "type": "integer"
+            "type": "string"
           }
         },
         "required": [
@@ -1987,7 +2632,10 @@
             "type": "string"
           },
           "session_id": {
-            "type": "integer"
+            "type": "string"
+          },
+          "producer_id": {
+            "type": "string"
           },
           "port": {
             "type": "integer"
@@ -2039,8 +2687,8 @@
             "items": {
               "type": "integer"
             },
-            "minItems": "16",
-            "maxItems": "16"
+            "minItems": 16,
+            "maxItems": 16
           }
         },
         "required": [
@@ -2048,6 +2696,7 @@
           "gst_pipeline",
           "render_node",
           "session_id",
+          "producer_id",
           "port",
           "timeout_ms",
           "wait_for_ping",

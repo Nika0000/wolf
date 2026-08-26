@@ -309,8 +309,28 @@ struct ResumeStreamEvent {
   std::string session_id;
 };
 
+/**
+ * Fired by the /api/v1/runners/pause and /resume endpoints; handled by the runner (e.g. runners/docker.cpp)
+ * to actually freeze/unfreeze the underlying container via Docker's pause/unpause.
+ *
+ * Unlike PauseStreamEvent/ResumeStreamEvent, these are only fired for an explicit API pause/resume, never
+ * on a plain client disconnect, so a freed container is always a deliberate pause.
+ */
+struct RunnerPauseEvent {
+  std::string session_id;
+};
+
+struct RunnerResumeEvent {
+  std::string session_id;
+};
+
 struct StopStreamEvent {
   std::string session_id;
+  /**
+   * When set, the runner should force-remove the container (and its volumes) once stopped,
+   * instead of leaving it around / following WOLF_STOP_CONTAINER_ON_EXIT. Used by session deletion.
+   */
+  bool delete_container = false;
 };
 
 struct ClientWolfUIComboEvent {
@@ -356,6 +376,8 @@ using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
                                                   immer::box<IDRRequestEvent>,
                                                   immer::box<PauseStreamEvent>,
                                                   immer::box<ResumeStreamEvent>,
+                                                  immer::box<RunnerPauseEvent>,
+                                                  immer::box<RunnerResumeEvent>,
                                                   immer::box<StopStreamEvent>,
                                                   immer::box<ClientWolfUIComboEvent>,
                                                   immer::box<RTPVideoPingEvent>,
@@ -377,6 +399,8 @@ using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
                                    immer::box<IDRRequestEvent>,
                                    immer::box<PauseStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
+                                   immer::box<RunnerPauseEvent>,
+                                   immer::box<RunnerResumeEvent>,
                                    immer::box<StopStreamEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
                                    immer::box<RTPVideoPingEvent>,
@@ -398,6 +422,8 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
                                    immer::box<IDRRequestEvent>,
                                    immer::box<PauseStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
+                                   immer::box<RunnerPauseEvent>,
+                                   immer::box<RunnerResumeEvent>,
                                    immer::box<StopStreamEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
                                    immer::box<RTPVideoPingEvent>,
@@ -455,6 +481,16 @@ struct StreamSession {
   std::shared_ptr<std::atomic<std::int64_t>> last_input_at_ns = std::make_shared<std::atomic<std::int64_t>>(
       std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
           .count());
+
+  /**
+   * Set when the session has been explicitly paused via the API (/api/v1/runners/pause).
+   *
+   * Time spent in this state is not counted towards `idle_timeout_seconds`: the idle timeout
+   * watchdog keeps shifting `last_input_at_ns` forward for as long as the session stays paused.
+   * Note that this is *not* set by the PauseStreamEvent fired when a Moonlight client disconnects,
+   * otherwise an abandoned session would never be reaped.
+   */
+  std::shared_ptr<std::atomic<bool>> paused = std::make_shared<std::atomic<bool>>(false);
 
   /**
    * Optional: the wayland display for the current session.

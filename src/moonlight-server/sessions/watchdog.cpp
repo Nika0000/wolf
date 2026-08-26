@@ -2,6 +2,7 @@
 #include <immer/set.hpp>
 #include <immer/vector_transient.hpp>
 #include <sessions/handlers.hpp>
+#include <state/sessions.hpp>
 #include <thread>
 
 namespace wolf::core::sessions {
@@ -13,6 +14,8 @@ using namespace std::chrono_literals;
  *
  * For each session that has an `idle_timeout_seconds` configured, the watchdog fires a
  * `StopStreamEvent` once the session has been idle for at least that many seconds.
+ * Sessions that have been explicitly paused via the API are never reaped, and the time they
+ * spend paused doesn't count towards their idle timeout.
  * A `StopStreamEvent` handler is registered to clean up tracking state when a session ends.
  *
  * @returns Event bus handlers that must be kept alive for the lifetime of the watchdog.
@@ -30,11 +33,27 @@ setup_idle_timeout_watchdog(const state::SessionsAtoms &sessions, std::shared_pt
         stop_fired_sessions->update([&ev](const immer::set<std::string> &s) { return s.erase(ev->session_id); });
       }));
 
+  // A client reconnecting also un-pauses the session, restarting its idle countdown
+  handlers.push_back(ev_bus->register_handler<immer::box<events::ResumeStreamEvent>>(
+      [sessions](const immer::box<events::ResumeStreamEvent> &ev) {
+        auto running = sessions->load();
+        if (auto session = state::get_session_by_id(running.get(), ev->session_id)) {
+          session->paused->store(false);
+          auto now_ns =
+              std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                  .count();
+          session->last_input_at_ns->store(now_ns);
+        }
+      }));
+
   std::thread([sessions, ev_bus, stop_fired_sessions]() {
+    auto last_tick = std::chrono::steady_clock::now();
     while (true) {
       auto running = sessions->load();
       auto now = std::chrono::steady_clock::now();
       auto fired = stop_fired_sessions->load();
+      auto since_last_tick_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_tick).count();
+      last_tick = now;
 
       for (const auto &session : running.get()) {
         if (!session.idle_timeout_seconds || *session.idle_timeout_seconds <= 0) {
@@ -42,6 +61,13 @@ setup_idle_timeout_watchdog(const state::SessionsAtoms &sessions, std::shared_pt
         }
 
         if (fired->count(session.session_id)) {
+          continue;
+        }
+
+        if (session.paused->load()) {
+          // Paused time doesn't count as idle time: shift the last input forward by the elapsed
+          // time, so that the idle counter is frozen (and not reset) for as long as we stay paused.
+          session.last_input_at_ns->fetch_add(since_last_tick_ns);
           continue;
         }
 

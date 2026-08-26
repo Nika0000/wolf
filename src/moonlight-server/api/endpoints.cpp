@@ -451,24 +451,59 @@ void UnixSocketServer::endpoint_StreamSessionStart(const HTTPRequest &req, std::
   }
 }
 
-void UnixSocketServer::endpoint_StreamSessionPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
-  auto session = rfl::json::read<StreamSessionPauseRequest>(req.body);
-  if (session) {
+void UnixSocketServer::endpoint_RunnerPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto pause_req = rfl::json::read<RunnerPauseRequest>(req.body);
+  if (pause_req) {
     auto sessions = state_->app_state->running_sessions->load();
-    const auto &session_id = session.value().session_id;
-    if (state::get_session_by_id(sessions.get(), session_id)) {
+    const auto &session_id = pause_req.value().session_id;
+    if (auto stream_session = state::get_session_by_id(sessions.get(), session_id)) {
+      // Freeze the idle timeout: a session paused on purpose shouldn't be reaped by the watchdog
+      stream_session->paused->store(true);
       this->state_->app_state->event_bus->fire_event(
-          immer::box<events::PauseStreamEvent>(events::PauseStreamEvent{.session_id = session_id}));
+          immer::box<events::RunnerPauseEvent>(events::RunnerPauseEvent{.session_id = session_id}));
       auto res = GenericSuccessResponse{.success = true};
       send_http(socket, 200, rfl::json::write(res));
     } else {
-      logs::log(logs::warning, "[API] Invalid session_id: {}", session.value().session_id);
+      logs::log(logs::warning, "[API] Invalid session_id: {}", session_id);
       auto res = GenericErrorResponse{.error = "Invalid session_id"};
       send_http(socket, 500, rfl::json::write(res));
     }
   } else {
-    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, session.error().what());
-    auto res = GenericErrorResponse{.error = session.error().what()};
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, pause_req.error().what());
+    auto res = GenericErrorResponse{.error = pause_req.error().what()};
+    send_http(socket, 500, rfl::json::write(res));
+  }
+}
+
+/**
+ * Unpauses the runner's container (see RunnerResumeEvent handlers, e.g. in runners/docker.cpp), clears
+ * the session's paused state and re-starts its idle timeout countdown. The video/audio pipelines are
+ * left untouched: freezing the container also freezes frame production, so there's nothing to tear
+ * down or recreate.
+ */
+void UnixSocketServer::endpoint_RunnerResume(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto resume_req = rfl::json::read<RunnerResumeRequest>(req.body);
+  if (resume_req) {
+    auto sessions = state_->app_state->running_sessions->load();
+    const auto &session_id = resume_req.value().session_id;
+    if (auto stream_session = state::get_session_by_id(sessions.get(), session_id)) {
+      stream_session->paused->store(false);
+      // Restart the idle countdown from now, so that a resumed session gets a full timeout window
+      stream_session->last_input_at_ns->store(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+              .count());
+      this->state_->app_state->event_bus->fire_event(
+          immer::box<events::RunnerResumeEvent>(events::RunnerResumeEvent{.session_id = session_id}));
+      auto res = GenericSuccessResponse{.success = true};
+      send_http(socket, 200, rfl::json::write(res));
+    } else {
+      logs::log(logs::warning, "[API] Invalid session_id: {}", session_id);
+      auto res = GenericErrorResponse{.error = "Invalid session_id"};
+      send_http(socket, 500, rfl::json::write(res));
+    }
+  } else {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, resume_req.error().what());
+    auto res = GenericErrorResponse{.error = resume_req.error().what()};
     send_http(socket, 500, rfl::json::write(res));
   }
 }
@@ -496,6 +531,87 @@ void UnixSocketServer::endpoint_StreamSessionStop(const HTTPRequest &req, std::s
   }
 }
 
+void UnixSocketServer::endpoint_AppStateDelete(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto delete_req = rfl::json::read<AppStateDeleteRequest>(req.body);
+  if (!delete_req) {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, delete_req.error().what());
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = delete_req.error().what()}));
+    return;
+  }
+
+  auto client = state::get_client_by_id(state_->app_state->config, delete_req.value().client_id.value());
+  if (!client) {
+    logs::log(logs::warning, "[API] Invalid client_id: {}", delete_req.value().client_id.value());
+    send_http(socket, 404, rfl::json::write(GenericErrorResponse{.error = "Invalid client_id"}));
+    return;
+  }
+
+  auto app = state::get_moonlight_app_by_id(state_->app_state->config, delete_req.value().app_id.value());
+  if (!app) {
+    logs::log(logs::warning, "[API] Invalid app_id: {}", delete_req.value().app_id.value());
+    send_http(socket, 404, rfl::json::write(GenericErrorResponse{.error = "Invalid app_id"}));
+    return;
+  }
+
+  // Mirrors the layout create_stream_session() uses, so this resolves to the same folder whether
+  // or not a session for this client/app pair is currently running.
+  auto state_folder = (std::filesystem::path(state_->app_state->host->local_base_state_folder) /
+                       client->app_state_folder / app.value()->base.title)
+                          .string();
+
+  auto sessions = state_->app_state->running_sessions->load();
+  auto running_session =
+      std::find_if(sessions.get().begin(), sessions.get().end(), [&state_folder](const events::StreamSession &s) {
+        return s.app_local_state_folder == state_folder;
+      });
+
+  if (running_session == sessions.get().end()) {
+    // Nothing is running against this state folder, just delete it directly.
+    try {
+      std::filesystem::remove_all(state_folder);
+    } catch (const std::filesystem::filesystem_error &e) {
+      logs::log(logs::warning, "[API] Failed to remove state folder {}: {}", state_folder, e.what());
+    }
+    send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
+    return;
+  }
+
+  auto session_id = running_session->session_id;
+
+  // Ask the runner to tear down and force-remove the container; running_sessions is updated by the
+  // existing StopStreamEvent handler, and docker.cpp only fires DockerContainerStopped once any
+  // requested removal has completed, so we wait for that to delete the on-disk state folder.
+  auto stopped_promise = std::make_shared<std::promise<void>>();
+  auto stopped_future = stopped_promise->get_future();
+  auto stopped_handler = state_->app_state->event_bus->register_handler<immer::box<events::DockerContainerStopped>>(
+      [session_id, stopped_promise](const immer::box<events::DockerContainerStopped> &ev) {
+        if (ev->session_id == session_id) {
+          stopped_promise->set_value();
+        }
+      });
+
+  state_->app_state->event_bus->fire_event(immer::box<events::StopStreamEvent>(
+      events::StopStreamEvent{.session_id = session_id, .delete_container = true}));
+
+  std::thread([this, session_id, state_folder, stopped_future = std::move(stopped_future),
+              stopped_handler = std::move(stopped_handler)]() mutable {
+    // Bounded: runners that never fire DockerContainerStopped (e.g. a plain process runner) would
+    // otherwise leave this thread, and the state folder, around forever.
+    if (stopped_future.wait_for(std::chrono::seconds(25)) != std::future_status::ready) {
+      logs::log(logs::warning, "[API] Timed out waiting for session {} to stop, deleting its state anyway", session_id);
+    }
+    stopped_handler.unregister();
+
+    try {
+      std::filesystem::remove_all(state_folder);
+    } catch (const std::filesystem::filesystem_error &e) {
+      logs::log(logs::warning, "[API] Failed to remove state folder {}: {}", state_folder, e.what());
+    }
+  }).detach();
+
+  send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
+}
+
 void UnixSocketServer::endpoint_StreamSessionHandleInput(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto input_request = rfl::json::read<StreamSessionHandleInputRequest>(req.body);
   if (input_request) {
@@ -515,6 +631,93 @@ void UnixSocketServer::endpoint_StreamSessionHandleInput(const HTTPRequest &req,
   } else {
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, input_request.error().what());
     send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = input_request.error().what()}));
+  }
+}
+
+void UnixSocketServer::endpoint_RunnerExec(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto exec_request = rfl::json::read<RunnerExecRequest>(req.body);
+  if (!exec_request) {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, exec_request.error().what());
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = exec_request.error().what()}));
+    return;
+  }
+
+  auto sessions = state_->app_state->running_sessions->load();
+  auto session_id = exec_request.value().session_id.get();
+  if (!state::get_session_by_id(sessions.get(), session_id)) {
+    logs::log(logs::warning, "[API] Invalid session_id: {}", session_id);
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid session_id"}));
+    return;
+  }
+
+  docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+  auto containers = docker_api.get_containers();
+  auto suffix = fmt::format("_{}", session_id);
+  auto container = std::find_if(containers.begin(), containers.end(), [&suffix](const docker::Container &c) {
+    return c.name.size() >= suffix.size() && c.name.compare(c.name.size() - suffix.size(), suffix.size(), suffix) == 0;
+  });
+  if (container == containers.end()) {
+    logs::log(logs::warning, "[API] No running container found for session_id: {}", session_id);
+    send_http(socket, 404, rfl::json::write(GenericErrorResponse{.error = "No running container found for session"}));
+    return;
+  }
+
+  auto container_id = container->id;
+  auto command_vec = exec_request.value().command.get();
+  auto user = exec_request.value().user.get().value_or("root");
+  auto stream = exec_request.value().stream.get().value_or(false);
+
+  if (stream) {
+    // The exec can be long-running (e.g. waiting on user interaction), stream each output chunk to the client
+    // as soon as it's produced instead of buffering until the process exits.
+    std::thread([this, socket, container_id, command_vec, user]() {
+      docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+      std::vector<std::string_view> command(command_vec.begin(), command_vec.end());
+
+      bool first_send = true;
+      auto send_chunk = [this, socket, &first_send](std::string_view chunk) {
+        if (chunk.empty()) {
+          return;
+        }
+        if (first_send) {
+          send_data(socket, "HTTP/1.0 200 OK\r\n\r\n");
+          first_send = false;
+        }
+        send_data(socket, rfl::json::write(RunnerExecOutputEvent{.output = std::string(chunk)}) + "\r\n");
+      };
+
+      if (auto exit_code = docker_api.exec_stream(container_id, command, send_chunk, user)) {
+        if (first_send) {
+          send_data(socket, "HTTP/1.0 200 OK\r\n\r\n");
+        }
+        send_data(socket,
+                 rfl::json::write(RunnerExecResponse{
+                     .success = *exit_code == 0, .exit_code = *exit_code }) +
+                     "\r\n");
+      } else if (first_send) {
+        send_http(socket,
+                 500,
+                 rfl::json::write(GenericErrorResponse{.error = "Failed to execute command in container"}));
+      } else {
+        send_data(socket,
+                 rfl::json::write(GenericErrorResponse{.error = "Failed to execute command in container"}) + "\r\n");
+      }
+    }).detach();
+  } else {
+    std::thread([this, socket, container_id, command_vec, user]() {
+      docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+      std::vector<std::string_view> command(command_vec.begin(), command_vec.end());
+
+      if (auto result = docker_api.exec_capture(container_id, command, user)) {
+        send_http(socket,
+                 200,
+                 rfl::json::write(RunnerExecResponse{.success = result->exit_code == 0,
+                                                      .exit_code = result->exit_code,
+                                                      .output = result->output}));
+      } else {
+        send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Failed to execute command in container"}));
+      }
+    }).detach();
   }
 }
 

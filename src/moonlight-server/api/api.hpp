@@ -156,12 +156,23 @@ struct StreamSessionStartRequest {
   events::AudioSession audio_session;
 };
 
-struct StreamSessionPauseRequest {
+struct RunnerPauseRequest {
+  events::RunnerTypes runner;
+  std::string session_id;
+};
+
+struct RunnerResumeRequest {
+  events::RunnerTypes runner;
   std::string session_id;
 };
 
 struct StreamSessionStopRequest {
   std::string session_id;
+};
+
+struct AppStateDeleteRequest {
+  rfl::Description<"The paired client whose app state should be removed", std::string> client_id;
+  rfl::Description<"The app whose on-disk state should be removed", std::string> app_id;
 };
 
 struct StreamSessionHandleInputRequest {
@@ -229,6 +240,33 @@ struct DockerPullImageResponse {
   bool success = true;
 };
 
+struct RunnerExecRequest {
+  rfl::Description<"The session ID whose running container the command will be executed in", std::string> session_id;
+  rfl::Description<"The command to run, as argv (e.g. [\"/bin/bash\", \"-c\", \"echo hi\"])", std::vector<std::string>>
+      command;
+  rfl::Description<"The user to run the command as (optional, defaults to root)", std::optional<std::string>> user;
+  rfl::Description<"If true, the response is a stream of newline-delimited JSON: zero or more "
+                   "RunnerExecOutputEvent chunks followed by a final RunnerExecResponse. If false (default), "
+                   "the command runs to completion and a single RunnerExecResponse with the full output is "
+                   "returned.",
+                   std::optional<bool>>
+      stream;
+};
+
+struct RunnerExecOutputEvent {
+  rfl::Description<"A chunk of stdout/stderr output from the executed command, as it becomes available",
+                   std::string>
+      output;
+};
+
+struct RunnerExecResponse {
+  bool success = true;
+  int exit_code = 0;
+  rfl::Description<"Full combined stdout/stderr output. Only populated when streamed is false.",
+                   std::optional<std::string>>
+      output;
+};
+
 struct UnixSocket {
   boost::asio::local::stream_protocol::socket socket;
   bool is_alive = true;
@@ -255,6 +293,7 @@ private:
   void endpoint_Apps(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_RemoveApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_AppStateDelete(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void endpoint_Profiles(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_AddProfile(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
@@ -266,9 +305,12 @@ private:
   void endpoint_StreamSessionCreate(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionAdd(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionStart(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
-  void endpoint_StreamSessionPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionStop(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionHandleInput(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_RunnerExec(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+
+  void endpoint_RunnerPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_RunnerResume(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void endpoint_Lobbies(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_LobbyCreate(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);

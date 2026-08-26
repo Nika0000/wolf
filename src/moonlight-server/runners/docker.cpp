@@ -1,3 +1,5 @@
+#include <atomic>
+#include <memory>
 #include <runners/docker.hpp>
 
 namespace wolf::core::docker {
@@ -191,27 +193,67 @@ void RunDocker::run(std::string_view session_id,
 
   if (auto docker_container = docker_api.create(new_container, final_json_opts)) {
     auto container_id = docker_container->id;
-    docker_api.start_by_id(container_id);
 
     logs::log(logs::info, "[DOCKER] Starting container: {}", docker_container->name);
     logs::log(logs::debug, "[DOCKER] Starting container: {}", *docker_container);
 
-    std::string inspected_hostname;
-    if (auto inspected = docker_api.get_by_id(container_id)) {
-      inspected_hostname = inspected->hostname;
-      this->ev_bus->fire_event(immer::box<events::DockerContainerCreated>{events::DockerContainerCreated{
-          .container_id = container_id,
-          .hostname = inspected->hostname,
-          .session_id = std::string(session_id),
-      }});
-    } else {
-      logs::log(logs::warning, "[DOCKER] Unable to inspect container {} for hostname", container_id);
+    if (!docker_api.start_by_id(container_id)) {
+      logs::log(logs::warning, "[DOCKER] Failed to start container: {}", docker_container->name);
+      docker_api.remove_by_id(container_id);
+      try {
+        std::filesystem::remove_all(udev_base_path);
+      } catch (const std::filesystem::filesystem_error &e) {
+        logs::log(logs::warning, "Failed to remove udev base path: {}", e.what());
+      }
+      return;
     }
 
+    // The container is only actually usable (e.g. for /exec) once Docker reports it as RUNNING:
+    // `start` returning success only means the start request was accepted, not that the entrypoint is up.
+    auto inspected = docker_api.get_by_id(container_id);
+    if (!inspected || inspected->status != RUNNING) {
+      logs::log(logs::warning,
+               "[DOCKER] Container {} did not reach the RUNNING state after start",
+               docker_container->name);
+      docker_api.stop_by_id(container_id);
+      docker_api.remove_by_id(container_id);
+      try {
+        std::filesystem::remove_all(udev_base_path);
+      } catch (const std::filesystem::filesystem_error &e) {
+        logs::log(logs::warning, "Failed to remove udev base path: {}", e.what());
+      }
+      return;
+    }
+
+    std::string inspected_hostname = inspected->hostname;
+    this->ev_bus->fire_event(immer::box<events::DockerContainerCreated>{events::DockerContainerCreated{
+        .container_id = container_id,
+        .hostname = inspected->hostname,
+        .session_id = std::string(session_id),
+    }});
+
+    auto delete_requested = std::make_shared<std::atomic<bool>>(false);
     auto terminate_handler = this->ev_bus->register_handler<immer::box<events::StopStreamEvent>>(
-        [session_id, container_id, this](const immer::box<events::StopStreamEvent> &terminate_ev) {
+        [session_id, container_id, delete_requested, this](const immer::box<events::StopStreamEvent> &terminate_ev) {
           if (terminate_ev->session_id == session_id) {
+            if (terminate_ev->delete_container) {
+              delete_requested->store(true);
+            }
             docker_api.stop_by_id(container_id);
+          }
+        });
+
+    auto runner_pause_handler = this->ev_bus->register_handler<immer::box<events::RunnerPauseEvent>>(
+        [session_id, container_id, this](const immer::box<events::RunnerPauseEvent> &pause_ev) {
+          if (pause_ev->session_id == session_id) {
+            docker_api.pause_by_id(container_id);
+          }
+        });
+
+    auto runner_resume_handler = this->ev_bus->register_handler<immer::box<events::RunnerResumeEvent>>(
+        [session_id, container_id, this](const immer::box<events::RunnerResumeEvent> &resume_ev) {
+          if (resume_ev->session_id == session_id) {
+            docker_api.unpause_by_id(container_id);
           }
         });
 
@@ -249,6 +291,7 @@ void RunDocker::run(std::string_view session_id,
           }
         });
 
+    ContainerStatus status;
     do {
       // Plug all devices that are waiting in the queue
       while (auto device_ev = plugged_devices_queue->pop(50ms)) {
@@ -279,23 +322,29 @@ void RunDocker::run(std::string_view session_id,
 
       std::this_thread::sleep_for(500ms);
 
-    } while (docker_api.get_by_id(container_id)->status == RUNNING);
+      status = docker_api.get_by_id(container_id)->status;
+    } while (status == RUNNING || status == PAUSED);
 
     logs::log(logs::debug, "[DOCKER] Container logs: \n{}", docker_api.get_logs(container_id));
     logs::log(logs::debug, "[DOCKER] Stopping container: {}", docker_container->name);
 
-    this->ev_bus->fire_event(immer::box<events::DockerContainerStopped>{events::DockerContainerStopped{
-        .container_id = container_id,
-        .hostname = inspected_hostname,
-        .session_id = std::string(session_id),
-    }});
-
-    if (const auto env = utils::get_env("WOLF_STOP_CONTAINER_ON_EXIT")) {
+    if (delete_requested->load()) {
+      docker_api.stop_by_id(container_id);
+      docker_api.remove_by_id(container_id, /* remove_volumes */ true, /* force */ true);
+    } else if (const auto env = utils::get_env("WOLF_STOP_CONTAINER_ON_EXIT")) {
       if (std::string(env) == "TRUE") {
         docker_api.stop_by_id(container_id);
         docker_api.remove_by_id(container_id);
       }
     }
+
+    // Fired only after any requested removal has completed, so listeners can rely on the
+    // container (and its volumes, if deletion was requested) being fully gone by this point.
+    this->ev_bus->fire_event(immer::box<events::DockerContainerStopped>{events::DockerContainerStopped{
+        .container_id = container_id,
+        .hostname = inspected_hostname,
+        .session_id = std::string(session_id),
+    }});
 
     logs::log(logs::info, "Stopped container: {}", docker_container->name);
     try {
