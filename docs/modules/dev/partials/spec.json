@@ -1734,6 +1734,22 @@
                 "type": "null"
               }
             ]
+          },
+          "motion_controller_override": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "XBOX",
+                  "PS",
+                  "NINTENDO",
+                  "AUTO"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": []
@@ -2425,6 +2441,15 @@
           },
           "h_scroll_acceleration": {
             "type": "number"
+          },
+          "motion_controller_override": {
+            "type": "string",
+            "enum": [
+              "XBOX",
+              "PS",
+              "NINTENDO",
+              "AUTO"
+            ]
           }
         },
         "required": [
@@ -2433,7 +2458,8 @@
           "controllers_override",
           "mouse_acceleration",
           "v_scroll_acceleration",
-          "h_scroll_acceleration"
+          "h_scroll_acceleration",
+          "motion_controller_override"
         ]
       },
       "wolf__core__audio__AudioMode": {
