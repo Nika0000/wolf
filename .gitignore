@@ -22,3 +22,5 @@ Cargo.lock
 build/
 .clj-kondo
 .lsp
+
+graphify-out/
