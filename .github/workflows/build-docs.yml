@@ -9,8 +9,11 @@ on:
 
 jobs:
   build-docs:
+    # Only relevant on the upstream repo (needs GHCR_TOKEN with dispatch access to games-on-whales.github.io)
     # Avoid workflows to run twice for PRs (https://github.com/orgs/community/discussions/57827)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    if: |
+      github.repository == 'games-on-whales/wolf' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name)
     runs-on: ubuntu-latest
     steps:
       - name: Fire event
