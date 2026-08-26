@@ -213,8 +213,8 @@ void RunDocker::run(std::string_view session_id,
     auto inspected = docker_api.get_by_id(container_id);
     if (!inspected || inspected->status != RUNNING) {
       logs::log(logs::warning,
-               "[DOCKER] Container {} did not reach the RUNNING state after start",
-               docker_container->name);
+                "[DOCKER] Container {} did not reach the RUNNING state after start",
+                docker_container->name);
       docker_api.stop_by_id(container_id);
       docker_api.remove_by_id(container_id);
       try {

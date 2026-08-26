@@ -255,8 +255,7 @@ struct RunnerExecRequest {
 };
 
 struct RunnerExecOutputEvent {
-  rfl::Description<"A chunk of stdout/stderr output from the executed command, as it becomes available",
-                   std::string>
+  rfl::Description<"A chunk of stdout/stderr output from the executed command, as it becomes available", std::string>
       output;
 };
 
