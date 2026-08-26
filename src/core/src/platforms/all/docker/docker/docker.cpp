@@ -251,8 +251,8 @@ bool DockerAPI::pause_by_id(std::string_view id) const {
 
 bool DockerAPI::unpause_by_id(std::string_view id) const {
   if (auto conn = docker_connect(socket_path)) {
-    auto raw_msg = req(
-        conn.value().get(), POST, fmt::format("http://localhost/{}/containers/{}/unpause", docker_api_version, id));
+    auto raw_msg =
+        req(conn.value().get(), POST, fmt::format("http://localhost/{}/containers/{}/unpause", docker_api_version, id));
     if (raw_msg && (raw_msg->first == 204 || raw_msg->first == 304)) {
       return true;
     } else if (raw_msg) {
@@ -521,8 +521,9 @@ bool DockerAPI::exec(std::string_view id, const std::vector<std::string_view> &c
   return false;
 }
 
-std::optional<DockerAPI::ExecResult>
-DockerAPI::exec_capture(std::string_view id, const std::vector<std::string_view> &command, std::string_view user) const {
+std::optional<DockerAPI::ExecResult> DockerAPI::exec_capture(std::string_view id,
+                                                             const std::vector<std::string_view> &command,
+                                                             std::string_view user) const {
   if (auto conn = docker_connect(socket_path)) {
     auto api_url = fmt::format("http://localhost/{}/containers/{}/exec", docker_api_version, id);
     auto post_params = json::object{

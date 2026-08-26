@@ -590,11 +590,14 @@ void UnixSocketServer::endpoint_AppStateDelete(const HTTPRequest &req, std::shar
         }
       });
 
-  state_->app_state->event_bus->fire_event(immer::box<events::StopStreamEvent>(
-      events::StopStreamEvent{.session_id = session_id, .delete_container = true}));
+  state_->app_state->event_bus->fire_event(
+      immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id, .delete_container = true}));
 
-  std::thread([this, session_id, state_folder, stopped_future = std::move(stopped_future),
-              stopped_handler = std::move(stopped_handler)]() mutable {
+  std::thread([this,
+               session_id,
+               state_folder,
+               stopped_future = std::move(stopped_future),
+               stopped_handler = std::move(stopped_handler)]() mutable {
     // Bounded: runners that never fire DockerContainerStopped (e.g. a plain process runner) would
     // otherwise leave this thread, and the state folder, around forever.
     if (stopped_future.wait_for(std::chrono::seconds(25)) != std::future_status::ready) {
@@ -691,16 +694,14 @@ void UnixSocketServer::endpoint_RunnerExec(const HTTPRequest &req, std::shared_p
           send_data(socket, "HTTP/1.0 200 OK\r\n\r\n");
         }
         send_data(socket,
-                 rfl::json::write(RunnerExecResponse{
-                     .success = *exit_code == 0, .exit_code = *exit_code }) +
-                     "\r\n");
+                  rfl::json::write(RunnerExecResponse{.success = *exit_code == 0, .exit_code = *exit_code}) + "\r\n");
       } else if (first_send) {
         send_http(socket,
-                 500,
-                 rfl::json::write(GenericErrorResponse{.error = "Failed to execute command in container"}));
+                  500,
+                  rfl::json::write(GenericErrorResponse{.error = "Failed to execute command in container"}));
       } else {
         send_data(socket,
-                 rfl::json::write(GenericErrorResponse{.error = "Failed to execute command in container"}) + "\r\n");
+                  rfl::json::write(GenericErrorResponse{.error = "Failed to execute command in container"}) + "\r\n");
       }
     }).detach();
   } else {
@@ -710,12 +711,14 @@ void UnixSocketServer::endpoint_RunnerExec(const HTTPRequest &req, std::shared_p
 
       if (auto result = docker_api.exec_capture(container_id, command, user)) {
         send_http(socket,
-                 200,
-                 rfl::json::write(RunnerExecResponse{.success = result->exit_code == 0,
+                  200,
+                  rfl::json::write(RunnerExecResponse{.success = result->exit_code == 0,
                                                       .exit_code = result->exit_code,
                                                       .output = result->output}));
       } else {
-        send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Failed to execute command in container"}));
+        send_http(socket,
+                  500,
+                  rfl::json::write(GenericErrorResponse{.error = "Failed to execute command in container"}));
       }
     }).detach();
   }
